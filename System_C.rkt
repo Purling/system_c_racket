@@ -1,7 +1,7 @@
  #lang racket
 (require redex)
 
-;; Symbols for use Γ, σ, τ
+;; Symbols for use Γ, σ, τ, →
 
 ; Grammar
 ; Consider what syntactic sugar you want to add and what you want to remove
@@ -14,7 +14,7 @@
      (box b))
   
   (b f
-     ((x \tau) ... #\, (f σ) ... \Rightarrow s) ; Check if this will allow for the case in which there is actually none of one of the types
+     ((x τ) ... #\, (f σ) ... \Rightarrow s) ; Check if this will allow for the case in which there is actually none of one of the types
      (unbox e)
      (l cap)) ; Operational Semantics
   
@@ -36,7 +36,7 @@
 
   (Γ (g ...))
 
-  (g (x : \tau)
+  (g (x : τ)
      (f :* σ)
      (f : C σ))
 
@@ -77,7 +77,7 @@
    ----------------------------------------- "BoxElim"
    (block-type Γ (unbox e) σ C)]
 
-  ;; This condition is not algorithm. As such, it will need to be built into each of the other typing rules
+  ; This condition is not algorithm. As such, it will need to be built into each of the other typing rules
   ; [(block-type Γ b σ C)
   ; ;(side-condition subset (C_prime C)) ; Create metafunction which detects for subset
   ; ------------------------------ "BSub"
@@ -86,7 +86,7 @@
 
 ; Typing rule for expression typing
 (define-judgment-form System_C
-  #:mode (expr-type I I O)
+  #:mode (expr-type I I I)
   #:contract (expr-type Γ e τ)
   
   [
@@ -98,9 +98,9 @@
    ------------------------------ "Var"
    (expr-type Γ x τ)]
 
-  ; [(block-type Γ b σ C) ;; System_C.rkt:101:19: define-judgment-form: unbound pattern variable in: σ
-  ; ------------------------------ "BoxIntro"
-  ; (expr-type Γ (box b) (σ at C))]
+  [(block-type Γ b σ C)
+   ------------------------------ "BoxIntro"
+   (expr-type Γ (box b) (σ at C))] ;; The C is not yet bound. This is because we need to make it bidirectional (i.e., it both requires and needs C)
   
   )
 
@@ -108,7 +108,7 @@
 ; Look into making the output the type instead of the context and also into bidirectional output and input
 (define-judgment-form System_C
   #:mode (typeof I I I O)
-  #:contract (typeof Γ σ \tau C)
+  #:contract (typeof Γ σ τ C)
 
   [(typeof Γ s_0 τ_1 C_0)                      ; \tau_0 unbound variable
    (typeof (Γ #\, x : τ_1) s_0 τ_1 C_1)     ; (\Gamma #\, x : \tau_0) unbound variable error
@@ -129,14 +129,14 @@
   ; ------------------------------ "Def"
   ; (typeof Γ (def f = b #\; s) #\: \tau C)]
 
-  [(typeof Γ s \tau C)          ; Similar problem with C_prime and subsets
+  [(typeof Γ s τ C)          ; Similar problem with C_prime and subsets
    ------------------------------ "SSub"
-   (typeof Γ s \tau C)]
+   (typeof Γ s τ C)]
 
-  [(typeof Γ s_1 \tau (C \cup #\{ f #\}))      ; (\Gamma #\, f : \star (\tau_i ... \rightarrow \tau_0)) is throwing an error because \tau_1 isn't bound
-   (typeof Γ s_2 \tau C)                       ; Once again, this gamme will have to be tinkered around with and figured out
+  [(typeof Γ s_1 τ (C \cup #\{ f #\}))      ; (\Gamma #\, f : \star (\tau_i ... \rightarrow \tau_0)) is throwing an error because \tau_1 isn't bound
+   (typeof Γ s_2 τ C)                       ; Once again, this gamme will have to be tinkered around with and figured out
    ------------------------------ "Try"
-   (typeof Γ (try #\{ f => s_1 #\} with #\{ (x ... #\, k) => s_2 #\} ) \tau C)])
+   (typeof Γ (try #\{ f => s_1 #\} with #\{ (x ... #\, k) => s_2 #\} ) τ C)])
 
 ; Reduction Rules
 (define red

@@ -1,6 +1,8 @@
  #lang racket
 (require redex)
 
+;; Symbols for use Γ, σ, τ
+
 ; Grammar
 ; Consider what syntactic sugar you want to add and what you want to remove
 (define-language System_C
@@ -12,7 +14,7 @@
      (box b))
   
   (b f
-     ((x \tau) ... #\, (f \sigma) ... \Rightarrow s) ; Check if this will allow for the case in which there is actually none of one of the types
+     ((x \tau) ... #\, (f σ) ... \Rightarrow s) ; Check if this will allow for the case in which there is actually none of one of the types
      (unbox e)
      (l cap)) ; Operational Semantics
   
@@ -23,26 +25,24 @@
      (try f \Rightarrow s with x ... #\, k \Rightarrow s) ; Check if the ellipses only applies to x
      (l s with (x ... k) \Rightarrow s )) ; Operational Semantics
   
-  (\tau Int
-        Boolean
-        (\sigma at C))
+  (τ Int
+     Boolean
+     (σ at C))
   
-  (\sigma (\tau ... #\, (f \sigma) ... \rightarrow \tau)) ; Consider adding the #\: back into the f #\: \sigma
+  (σ (\tau ... #\, (f σ) ... \rightarrow τ)) ; Consider adding the #\: back into the f #\: \sigma
 
   ; Define metafunctions which emulate the functionality of sets
   (C (f ...))
 
-  (\Gamma (g ...))
+  (Γ (g ...))
 
   (g (x : \tau)
-     (f :* \sigma)
-     (f : C \sigma))
+     (f :* σ)
+     (f : C σ))
 
-  (x n
-     g
-     variable-not-otherwise-mentioned)
+  (x variable-not-otherwise-mentioned)
 
-  (f variable-not-otherwise-mentioned)
+  (f variable-not-otherwise-mentioned) ; Check if this can be used twice or if it needs to be in one definition with x
 
   ; Evaluation Context for Contexts
   (E ::= hole
@@ -51,78 +51,92 @@
   )
 
 ; Clause to determine if every element in a list is in another list (sub list)
-;count (member a) b
+; count (member a) b
 
-; Typing Rules
-; Look into making the output the type instead of the context
+;; Typing rules for block typing
 (define-judgment-form System_C
-  #:mode (typeof I I I O) ; 
-  #:contract (typeof \Gamma \sigma \tau C)
+  #:contract (block-type Γ b σ C )
+  #:mode (block-type I I I O)
 
-  [(typeof \Gamma f \sigma C)
-   (side-condition (member \sigma \Gamma)) ; Not sure if this will hold when the element exists in the list. It will if the values are truthy. Also, not sure correct when we are binding C
+  [(block-type Γ f σ C)
+   (side-condition (member σ Γ)) ; Not sure if this will hold when the element exists in the list. It will if the values are truthy. Also, not sure correct when we are binding C
    ------------------------------ "Transparent"
-   (typeof \Gamma f \sigma C)]
+   (block-type Γ f σ C)]
 
-  [(typeof \Gamma f \sigma C)
-   (side-condition (member \sigma \Gamma))
+  [(block-type Γ f σ C)
+   (side-condition (member σ Γ))
    ------------------------------ "Tracked"
-   (typeof \Gamma f \sigma C)]
+   (block-type Γ f σ C)]
 
   ; Not sure if '(g ...) is a valid way to express lists
-  [(typeof (\Gamma) ('((x \tau) ...) '((g \sigma) ...)) s \tau (append (C) '(g ...))) ; Define set-append (for now, we use regular list append as placeholder)
+  [(block-type (append (append (Γ) '((x τ) ...)) '((g σ) ...)) s τ (append (C) '(g ...))) ; Define set-append (for now, we use regular list append as placeholder)
    ------------------------------ "Block"
-   (typeof \Gamma (((x \tau_i) ...) #\, ((g \sigma) ...) s) \tau C)] ; Check if I need something to distinguish the many different tau's
+   (block-type Γ (((x τ_i) ...) #\, ((g σ) ...) s) τ C)] ; Check if I need something to distinguish the many different tau's
 
-  [(typeof \Gamma e (\sigma at ()) C)  ; I want to do (typeof \Gamma e (\sigma at C) C) but it is giving me an unbound pattern variable error
+  [(block-type Γ e (σ at ()) C)  ; I want to do (typeof \Gamma e (\sigma at C) C) but it is giving me an unbound pattern variable error
    ----------------------------------------- "BoxElim"
-   (typeof \Gamma (unbox e) \sigma C)]
+   (block-type Γ (unbox e) σ C)]
 
-  [(typeof \Gamma b \sigma C)
-   ;(side-condition subset (C_prime C)) ; Create metafunction which detects for subset
-   ------------------------------ "BSub"
-   (typeof \Gamma b \sigma C)]
+  ;; This condition is not algorithm. As such, it will need to be built into each of the other typing rules
+  ; [(block-type Γ b σ C)
+  ; ;(side-condition subset (C_prime C)) ; Create metafunction which detects for subset
+  ; ------------------------------ "BSub"
+  ; (block-type Γ b σ C)])
+)
 
+; Typing rule for expression typing
+(define-judgment-form System_C
+  #:mode (expr-type I I O)
+  #:contract (expr-type Γ e τ)
+  
   [
    ------------------------------ "Lit"
-   (typeof \Gamma n \Int \emptyset)] ; I assume that we just want any list, so it may not necessarily be accurate for it to be an \emptyset
+   (expr-type Γ n Int)] ;; TODO: Look how to force n to be an integer
 
-  [(typeof \Gamma x \tau C)
-   (side-condition (member x \Gamma))
+  [(expr-type Γ x τ)
+   (side-condition (member x Γ)) ;; TODO: Confirm that this is a correct way of making sure that the side-condition is obeyed
    ------------------------------ "Var"
-   (typeof \Gamma x \tau C)]
+   (expr-type Γ x τ)]
 
-  [(typeof \Gamma b \sigma C)
-   ------------------------------ "BoxIntro"
-   (typeof \Gamma (box b) \sigma C)]
+  ; [(block-type Γ b σ C) ;; System_C.rkt:101:19: define-judgment-form: unbound pattern variable in: σ
+  ; ------------------------------ "BoxIntro"
+  ; (expr-type Γ (box b) (σ at C))]
+  
+  )
 
-  [(typeof \Gamma s_0 \tau_1 C_0)                      ; \tau_0 unbound variable
-   (typeof (\Gamma #\, x : \tau_1) s_0 \tau_1 C_1)     ; (\Gamma #\, x : \tau_0) unbound variable error
+
+; Look into making the output the type instead of the context and also into bidirectional output and input
+(define-judgment-form System_C
+  #:mode (typeof I I I O)
+  #:contract (typeof Γ σ \tau C)
+
+  [(typeof Γ s_0 τ_1 C_0)                      ; \tau_0 unbound variable
+   (typeof (Γ #\, x : τ_1) s_0 τ_1 C_1)     ; (\Gamma #\, x : \tau_0) unbound variable error
    ------------------------------ "Val"
-   (typeof \Gamma (val x = s_0 #\; s_1) \tau_1 (C_0 \cup C_1))]
+   (typeof Γ (val x = s_0 #\; s_1) τ_1 (C_0 \cup C_1))]
 
-  [(typeof \Gamma e \tau C)         ; Same problem as with C. Need to figure out if the C should be C or an emptyset
+  [(typeof Γ e \tau C)         ; Same problem as with C. Need to figure out if the C should be C or an emptyset
    ------------------------------ "Ret"
-   (typeof \Gamma (return e) \tau \emptyset)]
+   (typeof Γ (return e) \tau \emptyset)]
 
   ; [(typeof \Gamma f #\: \sigma C)
   ;  ------------------------------ "App"
   ; (typeof \Gamma f #\: \sigma f)]
 
   ; Figure out how to resolve variable unbound
-  ; [(typeof \Gamma b #\: \sigma C_prime)
-  ; (typeof (\Gamma #\, f : C_prime \sigma) b #\: \tau C)
+  ; [(typeof Γ b #\: \sigma C_prime)
+  ; (typeof (Γ #\, f : C_prime \sigma) b #\: \tau C)
   ; ------------------------------ "Def"
-  ; (typeof \Gamma (def f = b #\; s) #\: \tau C)]
+  ; (typeof Γ (def f = b #\; s) #\: \tau C)]
 
-  [(typeof \Gamma s \tau C)          ; Similar problem with C_prime and subsets
+  [(typeof Γ s \tau C)          ; Similar problem with C_prime and subsets
    ------------------------------ "SSub"
-   (typeof \Gamma s \tau C)]
+   (typeof Γ s \tau C)]
 
-  [(typeof \Gamma s_1 \tau (C \cup #\{ f #\}))      ; (\Gamma #\, f : \star (\tau_i ... \rightarrow \tau_0)) is throwing an error because \tau_1 isn't bound
-   (typeof \Gamma s_2 \tau C)                       ; Once again, this gamme will have to be tinkered around with and figured out
+  [(typeof Γ s_1 \tau (C \cup #\{ f #\}))      ; (\Gamma #\, f : \star (\tau_i ... \rightarrow \tau_0)) is throwing an error because \tau_1 isn't bound
+   (typeof Γ s_2 \tau C)                       ; Once again, this gamme will have to be tinkered around with and figured out
    ------------------------------ "Try"
-   (typeof \Gamma (try #\{ f => s_1 #\} with #\{ (x ... #\, k) => s_2 #\} ) \tau C)])
+   (typeof Γ (try #\{ f => s_1 #\} with #\{ (x ... #\, k) => s_2 #\} ) \tau C)])
 
 ; Reduction Rules
 (define red

@@ -53,29 +53,60 @@
 ; Clause to determine if every element in a list is in another list (sub list)
 ; count (member a) b
 
+;; Create a find metafunction
+
+;; Metafunctions to help determine things
+
+;; Metafunction which attempts to find an element within a list and either returns #f or the element found
+(define-metafunction System_C
+  find : g Γ -> g
+  [(find g (g_1 g_2 ... g_3))
+   g
+   (side-condition (= (term g) (term g_1)))
+
+   or
+
+   (find g (g_2 ... g_3))]
+  
+  [(find g (g_1 g_2))
+   g
+   (side-condition (= (term g) (term g_1)))
+
+   or
+
+   (find g g_2)]
+  
+  [(find g g_1)
+   g
+   (side-condition (= (term g) (term g_1)))
+
+   or
+
+   #f]
+  )
+
 ;; Typing rules for block typing
 (define-judgment-form System_C
-  #:contract (block-type Γ b σ C )
-  #:mode (block-type I I I O)
+  #:contract (block-type Γ b σ C C)
+  #:mode (block-type I I I I O)
 
-  [(block-type Γ f σ C)
+  [(block-type Γ f σ C C)
    (side-condition (member σ Γ)) ; Not sure if this will hold when the element exists in the list. It will if the values are truthy. Also, not sure correct when we are binding C
    ------------------------------ "Transparent"
-   (block-type Γ f σ C)]
+   (block-type Γ f σ C C)]
 
-  [(block-type Γ f σ C)
-   (side-condition (member σ Γ))
+  [(where g (find (f :* σ) Γ))
    ------------------------------ "Tracked"
-   (block-type Γ f σ C)]
+   (block-type Γ f σ f f)]
 
   ; Not sure if '(g ...) is a valid way to express lists
-  [(block-type (append (append (Γ) '((x τ) ...)) '((g σ) ...)) s τ (append (C) '(g ...))) ; Define set-append (for now, we use regular list append as placeholder)
+  [(block-type (append (append (Γ) '((x τ) ...)) '((g σ) ...)) s τ (append (C) '(g ...)) C) ; Define set-append (for now, we use regular list append as placeholder)
    ------------------------------ "Block"
-   (block-type Γ (((x τ_i) ...) #\, ((g σ) ...) s) τ C)] ; Check if I need something to distinguish the many different tau's
+   (block-type Γ (((x τ_i) ...) #\, ((g σ) ...) s) τ C C)] ; Check if I need something to distinguish the many different tau's
 
-  [(block-type Γ e (σ at ()) C)  ; I want to do (typeof \Gamma e (\sigma at C) C) but it is giving me an unbound pattern variable error
+  [(expr-type Γ e (σ at C))
    ----------------------------------------- "BoxElim"
-   (block-type Γ (unbox e) σ C)]
+   (block-type Γ (unbox e) σ C C)]
 
   ; This condition is not algorithm. As such, it will need to be built into each of the other typing rules
   ; [(block-type Γ b σ C)
@@ -98,7 +129,7 @@
    ------------------------------ "Var"
    (expr-type Γ x τ)]
 
-  [(block-type Γ b σ C)
+  [(block-type Γ b σ C C)
    ------------------------------ "BoxIntro"
    (expr-type Γ (box b) (σ at C))] ;; The C is not yet bound. This is because we need to make it bidirectional (i.e., it both requires and needs C)
   

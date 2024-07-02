@@ -19,10 +19,10 @@
      (l cap)) ; Operational Semantics
   
   (s (def f = b #\; s)
-     (b e ... #\, b ... ) ; See if the two b's are different, maybe by having an underscore?
+     (b e ... #\, b ... ) ;; QUESTION: Are the two 'b's present different? If not, I will probably need an underscore or something to differentiate
      (val x = s #\; s)
      (return e)
-     (try f \Rightarrow s with x ... #\, k \Rightarrow s) ; Check if the ellipses only applies to x
+     (try f \Rightarrow s with x ... #\, k \Rightarrow s) ;; QUESTION: Do the ellipses only apply to x
      (l s with (x ... k) \Rightarrow s )) ; Operational Semantics
   
   (τ Int
@@ -31,7 +31,7 @@
   
   (σ (\tau ... #\, (f σ) ... \rightarrow τ)) ; Consider adding the #\: back into the f #\: \sigma
 
-  ; Define metafunctions which emulate the functionality of sets
+  ;; TODO: Define metafunctions which emulate the functionality of sets. (i.e., appending)
   (C (f ...))
 
   (Γ (g ...))
@@ -42,7 +42,7 @@
 
   (x variable-not-otherwise-mentioned)
 
-  (f variable-not-otherwise-mentioned) ; Check if this can be used twice or if it needs to be in one definition with x
+  (f variable-not-otherwise-mentioned)
 
   ; Evaluation Context for Contexts
   (E ::= hole
@@ -52,10 +52,6 @@
 
 ; Clause to determine if every element in a list is in another list (sub list)
 ; count (member a) b
-
-;; Create a find metafunction
-
-;; Metafunctions to help determine things
 
 ;; Metafunction which attempts to find an element within a list and either returns #f or the element found
 (define-metafunction System_C
@@ -85,20 +81,22 @@
    #f]
   )
 
+;; TODO: Figure out how exactly substitution would work
+
 ;; Typing rules for block typing
 (define-judgment-form System_C
-  #:contract (block-type Γ b σ C C)
+  #:contract (block-type Γ b σ C C) ;; QUESTION: Is this the way in which we would do bi-directional input and output? I have done so naively.
   #:mode (block-type I I I I O)
 
-  [(block-type Γ f σ C C)
-   (side-condition (member σ Γ)) ; Not sure if this will hold when the element exists in the list. It will if the values are truthy. Also, not sure correct when we are binding C
-   ------------------------------ "Transparent"
+  [(where g (find (f : C σ) Γ))
+   ---------------------------- "Transparent"
    (block-type Γ f σ C C)]
 
   [(where g (find (f :* σ) Γ))
-   ------------------------------ "Tracked"
-   (block-type Γ f σ f f)]
+   --------------------------- "Tracked"
+   (block-type Γ f σ (f) (f))] ;; QUESTION: Not sure if the (f) need to be '(f) (i.e., taken out)
 
+  ;; TODO: Confirm that this typing rule is valid
   ; Not sure if '(g ...) is a valid way to express lists
   [(block-type (append (append (Γ) '((x τ) ...)) '((g σ) ...)) s τ (append (C) '(g ...)) C) ; Define set-append (for now, we use regular list append as placeholder)
    ------------------------------ "Block"
@@ -107,17 +105,11 @@
   [(expr-type Γ e (σ at C))
    ----------------------------------------- "BoxElim"
    (block-type Γ (unbox e) σ C C)]
-
-  ; This condition is not algorithm. As such, it will need to be built into each of the other typing rules
-  ; [(block-type Γ b σ C)
-  ; ;(side-condition subset (C_prime C)) ; Create metafunction which detects for subset
-  ; ------------------------------ "BSub"
-  ; (block-type Γ b σ C)])
 )
 
-; Typing rule for expression typing
+;; Typing rule for expression typing
 (define-judgment-form System_C
-  #:mode (expr-type I I I)
+  #:mode (expr-type I I I) ;; QUESTION: I think that the mode for expr-type can just be all inputs
   #:contract (expr-type Γ e τ)
   
   [
@@ -135,8 +127,8 @@
   
   )
 
+;; TODO: Define substitution for statement typing
 
-; Look into making the output the type instead of the context and also into bidirectional output and input
 (define-judgment-form System_C
   #:mode (typeof I I I O)
   #:contract (typeof Γ σ τ C)
@@ -159,10 +151,6 @@
   ; (typeof (Γ #\, f : C_prime \sigma) b #\: \tau C)
   ; ------------------------------ "Def"
   ; (typeof Γ (def f = b #\; s) #\: \tau C)]
-
-  [(typeof Γ s τ C)          ; Similar problem with C_prime and subsets
-   ------------------------------ "SSub"
-   (typeof Γ s τ C)]
 
   [(typeof Γ s_1 τ (C \cup #\{ f #\}))      ; (\Gamma #\, f : \star (\tau_i ... \rightarrow \tau_0)) is throwing an error because \tau_1 isn't bound
    (typeof Γ s_2 τ C)                       ; Once again, this gamme will have to be tinkered around with and figured out

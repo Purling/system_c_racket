@@ -4,14 +4,14 @@
 ; Grammar
 ; Consider what syntactic sugar you want to add and what you want to remove
 (define-language System_C
-  (e (x)
-     (0)
-     (1)
-     (true)
-     (false)
+  (e x
+     0
+     1
+     true
+     false
      (box b))
   
-  (b (f)
+  (b f
      ((x \tau) ... #\, (f \sigma) ... \Rightarrow s) ; Check if this will allow for the case in which there is actually none of one of the types
      (unbox e)
      (l cap)) ; Operational Semantics
@@ -23,22 +23,26 @@
      (try f \Rightarrow s with x ... #\, k \Rightarrow s) ; Check if the ellipses only applies to x
      (l s with (x ... k) \Rightarrow s )) ; Operational Semantics
   
-  (\tau (Int)
-        (Boolean)
+  (\tau Int
+        Boolean
         (\sigma at C))
   
   (\sigma (\tau ... #\, (f \sigma) ... \rightarrow \tau)) ; Consider adding the #\: back into the f #\: \sigma
 
   ; Define metafunctions which emulate the functionality of sets
-  (C (null)) ; Don't know if this can be added to
+  (C (f ...))
 
-  (\Gamma (null))
+  (\Gamma (g ...))
 
-  (x (n)
-     (g)
-     (variable-not-otherwise-mentioned))
+  (g (x : \tau)
+     (f :* \sigma)
+     (f : C \sigma))
 
-  (f variable-not-otherwise-mentioned) ; Check if this can be used twice or if it needs to be in one definition with x
+  (x n
+     g
+     variable-not-otherwise-mentioned)
+
+  (f variable-not-otherwise-mentioned)
 
   ; Evaluation Context for Contexts
   (E ::= hole
@@ -52,7 +56,7 @@
 ; Typing Rules
 ; Look into making the output the type instead of the context
 (define-judgment-form System_C
-  #:mode (typeof I I I O)
+  #:mode (typeof I I I O) ; 
   #:contract (typeof \Gamma \sigma \tau C)
 
   [(typeof \Gamma f \sigma C)
@@ -66,7 +70,7 @@
    (typeof \Gamma f \sigma C)]
 
   ; Not sure if '(g ...) is a valid way to express lists
-  [(typeof (append (append (\Gamma) '((x \tau) ...)) '((g \sigma) ...)) s \tau (append (C) '(g ...))) ; Define set-append (for now, we use regular list append as placeholder)
+  [(typeof (\Gamma) ('((x \tau) ...) '((g \sigma) ...)) s \tau (append (C) '(g ...))) ; Define set-append (for now, we use regular list append as placeholder)
    ------------------------------ "Block"
    (typeof \Gamma (((x \tau_i) ...) #\, ((g \sigma) ...) s) \tau C)] ; Check if I need something to distinguish the many different tau's
 

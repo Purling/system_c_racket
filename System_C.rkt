@@ -29,7 +29,7 @@
      Boolean
      (σ at C))
   
-  (σ (τ ... #\, (f : σ) ... → τ)) ;; TODO: Make sure that : is added back into everywhere it needs to be added for typing
+  (σ (τ ... #\, (f : σ) ... → τ))
 
   ;; TODO: Define metafunctions which emulate the functionality of sets. (i.e., appending)
   (C (f ...))
@@ -48,8 +48,6 @@
      (#\{ val x = E #\; s #\})
      (l #\{ E #\} with #\{ (x ... k) => s #\})) ;; QUESTION: Not sure the parentheses need to be there for the x ... k. Don't  think they actually add anything of real substance
   )
-
-;; TODO: Define metafunction which determines if a set is a subset of another set
 
 ;; Metafunction which attempts to find an element within a list and either returns #f or the element found
 (define-metafunction System_C
@@ -78,6 +76,51 @@
 
    #f]
   )
+
+;; Subset metafunction
+(define-metafunction System_C
+  subset : C C -> C         ;; TODO: Look into if this has to be a maybe type (optional type) or something similar for the output. The output should be a bool, but we have yet to define a #f and #t in our language.
+  [(subset (f f_1 ...) (f_2 ... f f_4 ...))
+   (subset (f_1 ...) (f_2 ... f f_4 ...))
+
+   or
+
+   #f]
+  
+  [(subset (f f_1 ...) (f f_2 ...))
+   (subset (f_1 ...) (f f_2 ...))
+
+   or
+
+   #f]
+
+  [(subset (f f_1 ...) (f_2 ... f))
+   (subset (f_1 ...) (f_2 ... f))
+
+   or
+
+   #f]
+
+  [(subset (f) (f_1 ... f f_2 ...))
+   #t
+
+   or
+
+   #f]
+  
+  [(subset (f) (f f_1 ...))
+   #t
+   
+   or
+
+   #f]
+
+  [(subset (f) (f_1 ... f))
+   #t
+
+   or
+
+   #f])
 
 ;; TODO: Figure out how exactly substitution would work
 

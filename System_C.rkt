@@ -4,6 +4,7 @@
 ;; Symbols for use Γ, σ, τ, →, ⇒
 
 ;; Grammar
+;; TODO: Add the operational semantics to the grammar
 (define-language System_C
   (e x
      natural
@@ -14,7 +15,7 @@
   (b f
      ((x : τ) ... #\, (f : σ) ... ⇒ s) ;; TODO: Check if this will allow for the case in which there is actually none of one of the types. Or, check if it will be necessary to check for no types. Also, check if there will need to be brackets around the list
      (unbox e)
-     (l cap)) ;; QUESTION: Do we actually need these operational semantics here or should we extend them elsewhere?
+     (l cap))
   
   (s (def f = b #\; s)
      (b (e ... #\, b ...)) ;; QUESTION: Are the two 'b's present different? If not, I will probably need an underscore or something to differentiate
@@ -48,8 +49,7 @@
 
   ;; TODO: Use either gensym or fresh to generate unique runtime labels (this would be for try blocks). If using gensym, use pattern for defining l in the grammar otherwise, fresh will require something else
 
-  ;; QUESTION: Not sure the parentheses need to be there for the x ... k. Don't think they actually add anything of real substance
-  ;; TODO: Think about the run-time label l and the continuation k
+  ;; TODO: Think about the run-time label l
   (E ::= hole
      (val x = E #\; s)
      (l E with (x ... #\, k) ⇒ s))
@@ -183,9 +183,9 @@
   ;; TODO: Create a 'c' append which if given a #f, just returns a #f otherwise it returns the appended
   ;; TODO: Make sure that the output 'C' has all f's removed
   ;; TODO: Make sure that the result of the appending is a superset using the subset function
-  ;[(statement-type (Γ ((x : τ_i) ...) ((f :* σ) ...)) s τ (C f ...) (C f ...))
-  ; --------------------------------------------------------------------------------------------- "Block"
-  ; (block-type Γ (((x : τ_i) ...) #\, ((f : σ) ...) ⇒ s) ((τ_i ...) #\, ((f : σ) ...) → τ) c C)]
+  [(statement-type (Γ ((x : τ_i) ...) ((f :* σ) ...)) s τ none (C f ...))
+   --------------------------------------------------------------------------------------------- "Block"
+   (block-type Γ (((x : τ_i) ...) #\, ((f : σ) ...) ⇒ s) ((τ_i ...) #\, ((f : σ) ...) → τ) c C)]
 
   [(expr-type Γ e (σ at C))
    ----------------------------------------- "BoxElim"
@@ -231,7 +231,7 @@
    ---------------------------------------------------- "Ret"
    (statement-type Γ (return e) τ \emptyset \emptyset)]
 
-  ;; QUESTION: Have I expressed the multiple of the (expr-type Γ e_i τ_i) and (block-type Γ b_j σ_j C_j C_j) correctly?
+  ;; QUESTION: Have I expressed the multiple of the (expr-type Γ e_i τ_i) and (block-type Γ b_j σ_j C_j C_j) correctly? (i.e., (expr-type Γ e_i τ_i) ... and (block-type Γ b_j σ_j C_j C_j) ...)
   ;; TODO: Figure out the substitution in App for (τ[f_j→C_j]). This will probably just be a redex metafunction or something of the sort.
   [(block-type Γ b (τ_i ... #\, (f : σ) ... → τ) C C)
    (expr-type Γ e_i τ_i) ...
@@ -239,16 +239,14 @@
     -------------------------------------------------------------------------------------------------- "App"
    (statement-type Γ (b (e_i ... #\, b_j ...)) (τ) (set-append C (C_j ...)) (set-append C (C_j ...)))]
 
-  ;; TODO: Confirm logic around the input and output for def
-  ;[(block-type Γ b σ C C_prime)  ;; QUESTION: Confirm logic of the output and input in this instance. (i.e., the typing rule is given C and we output a C_prime)
-  ; (statement-type (Γ (f : C_prime σ)) b τ C C) ;; QUESTION: I still have to wrap my head around the redex and racket stuff. Is (Γ (f : C_prime σ)) a list?
-  ; ------------------------------------------------ "Def"
-  ; (statement-type Γ (def f = b #\; s) τ C C)]
+  [(block-type Γ b σ none C_prime)
+   (statement-type (Γ (f : C_prime σ)) s τ C_prime C)
+   -------------------------------------------- "Def"
+   (statement-type Γ (def f = b #\; s) τ none C)]
 
-  ;; RESOLVE: Input/Output
-  ;; TODO: Make sure of the logic behind (C f). Do I need to use the append metafunction?
-  ;[(statement-type (Γ (f :* (τ_i ...) → τ_0)) s_1 τ (C f) (C f))
-  ; (statement-type (Γ ((x_i : τ_i) ...) (x_k : C (τ_0 → τ))) s_2 τ C C)
+  ;; RESOLVE: Input/Output problem with τ_i
+  ;[(statement-type (Γ (f :* (τ_i ... → τ_0))) s_1 τ C (append f C))
+  ; (statement-type (Γ (x_i : τ_i) ... (k : C (τ_0 → τ))) s_2 τ C C)
   ; ------------------------------------------------------------------------------------ "Try"
   ; (statement-type Γ (try f ⇒ s_1 with (x_i ... #\, x_k) ⇒ s_2) τ C C)]
   )

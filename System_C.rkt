@@ -75,7 +75,7 @@
    #f]
   )
 
-;; Set append metafunction
+;; Set append metafunction for one element
 (define-metafunction System_C
   append : f C -> C
   [(append f (f_1 ... f f_2 ...))
@@ -89,6 +89,16 @@
 
   [(append f C)
    (C f)]
+  )
+
+;; Set append for appending two sets together
+(define-metafunction System_C
+  set-append : C C -> C
+  [(set-append (f f_1 ...) C)
+   (set-append (f_1 ...) (append f C))]
+
+  [(set-append (f) C)
+   (append f C)]
   )
 
 ;; Subset metafunction
@@ -188,14 +198,16 @@
 
   ;; TODO: Create an append metafunction for sets
   ;; TODO: Fix problem with unbound variable
+  ;; QUESTION: For the union, can we just call the metafunction which does a set union between the two sets given?
   ;[(statement-type Γ s_0 τ_0 C_0 C_0)
   ; (statement-type (Γ (x : τ_0)) s_1 τ_1 C_1 C_1)
   ; --------------------------------------------------------------------------- "Val"
-  ; (statement-type Γ (val x = s_0 #\; s_1) τ_1 (C_0 \cup C_1) (C_0 \cup C_1))] ;; TODO: Replace the \cup with a set append
+  ; (statement-type Γ (val x = s_0 #\; s_1) τ_1 (set-append C_0 C_1) (set-append C_0 C_1))]
 
+  ;; TODO: Make sure that the emptyset is expressed correctly as a null set. (i.e., I don't think it should be expressed as \emptyset. Instead, it should probably be an empty list)
   [(expr-type Γ e τ)
    ---------------------------------------------------- "Ret"
-   (statement-type Γ (return e) τ \emptyset \emptyset)] ;; TODO: Make sure that the emptyset is expressed correctly as a null set. (i.e., I don't think it should be expressed as \emptyset. Instead, it should probably be an empty list)
+   (statement-type Γ (return e) τ \emptyset \emptyset)]
 
   ;; QUESTION: How do I express the multiple (expr-type Γ e_i τ_i) and (block-type b_j σ_j C_j)?
   ;; TODO: Figure out the substitution in App for (τ[f_j→C_j])
@@ -204,7 +216,7 @@
   ; (expr-type Γ e_i τ_i)
   ; (block-type Γ b_j σ_j C_j C_j)
   ;  ----------------------------------------------------- "App"
-  ; (statement-type Γ (b (e_i ... #\, b_j ...)) (τ) (C \cup (C_j ...)) (C \cup (C_j ...)))]
+  ; (statement-type Γ (b (e_i ... #\, b_j ...)) (τ) (set-append C (C_j ...)) (set-append C (C_j ...)))]
 
   ;; TODO: Confirm logic around the input and output for def
   ;[(block-type Γ b σ C C_prime)  ;; QUESTION: Confirm logic of the output and input in this instance. (i.e., the typing rule is given C and we output a C_prime)
@@ -213,6 +225,7 @@
   ; (statement-type Γ (def f = b #\; s) τ C C)]
 
   ;; RESOLVE: Input/Output
+  ;; TODO: Make sure of the logic behind (C f). Do I need to use the append metafunction?
   ;[(statement-type (Γ (f :* (τ_i ...) → τ_0)) s_1 τ (C f) (C f))
   ; (statement-type (Γ ((x_i : τ_i) ...) (x_k : C (τ_0 → τ))) s_2 τ C C)
   ; ------------------------------------------------------------------------------------ "Try"

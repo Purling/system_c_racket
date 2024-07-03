@@ -18,7 +18,7 @@
      (l cap))
   
   (s (def f = b #\; s)
-     (b (e ... #\, b ...)) ;; QUESTION: Are the two 'b's present different? If not, I will probably need an underscore or something to differentiate
+     (b (e ... #\, b ...))
      (val x = s #\; s)
      (return e)
      (try f ⇒ s with (x ... #\, k) ⇒ s)
@@ -47,6 +47,14 @@
 
   (k variable-not-otherwise-mentioned)
 
+  (x-or-f x
+          f)
+
+  (find-return-type (C σ)
+                    (* σ)
+                    τ
+                    #f)
+
   ;; TODO: Use either gensym or fresh to generate unique runtime labels (this would be for try blocks). If using gensym, use pattern for defining l in the grammar otherwise, fresh will require something else
 
   ;; TODO: Think about the run-time label l
@@ -55,28 +63,70 @@
      (l E with (x ... #\, k) ⇒ s))
   )
 
+(define-metafunction System_C
+  find-helper : x-or-f g -> find-return-type
+  [(find-helper x-or-f (x : τ))
+   τ
+   (side-condition (= (term x-or-f) (term x)))]
+
+  [(find-helper x-or-f (f :* σ))
+   (* σ)
+   (side-condition (= (term x-or-f) (term f)))]
+
+  [(find-helper x-or-f (f : C σ))
+   (C σ)
+   (side-condition (= (term x-or-f) (term f)))]
+)
+
+(define-metafunction System_C
+  find-equal : x-or-f g -> boolean
+  [(find-equal x-or-f (x : τ))
+   #t
+   (side-condition (= (term x-or-f) (term x)))
+
+   or
+
+   #f]
+
+  [(find-equal x-or-f (f :* σ))
+   #t
+   (side-condition (= (term x-or-f) (term f)))
+
+   or
+
+   #f]
+
+  [(find-equal x-or-f (f : C σ))
+   #t
+   (side-condition (= (term x-or-f) (term f)))
+
+   or
+
+   #f]
+)
+
 ;; Metafunction which attempts to find an element within a list and either returns #f or the element found
 (define-metafunction System_C
-  find : g Γ -> g
-  [(find g (g_1 g_2 ... g_3))
-   g
-   (side-condition (= (term g) (term g_1)))
+  find : x-or-f Γ -> find-return-type
+  [(find x-or-f (g_1 g_2 ... g_3))
+   (find-helper x-or-f g_1)
+   (where #t (find-equal x-or-f g_1))
 
    or
 
-   (find g (g_2 ... g_3))]
+   (find x-or-f (g_2 ... g_3))]
   
-  [(find g (g_1 g_2))
-   g
-   (side-condition (= (term g) (term g_1)))
+  [(find x-or-f (g_1 g_2))
+   (find-helper x-or-f g_1)
+   (where #t (find-equal x-or-f g_1))
 
    or
 
-   (find g g_2)]
+   (find x-or-f g_2)]
   
-  [(find g g_1)
-   g
-   (side-condition (= (term g) (term g_1)))
+  [(find x-or-f g_1)
+   (find-helper x-or-f g_1)
+   (where #t (find-equal x-or-f g_1))
 
    or
 
@@ -164,17 +214,13 @@
   #:contract (block-type Γ b σ c C)
   #:mode (block-type I I O I O)
 
-  ;; TODO: Change the find metafunction such that it returns either a found type σ or a default value (probably something like #f)
-  ;; N.B.: The find metafunction needs to be able to return a value which has distinction between the different types of g's (i.e., the difference between (x : τ), (f :* σ) and (f : C σ)
-  ;; TODO: Create a new grammar construct which enables a contract for find (i.e., a new construct which is (C σ), (* σ) and τ
   [(where (C σ) (find f Γ))
    ---------------------------- "Transparent"
-   (block-type Γ f σ c C)]
+   (block-type Γ f σ none C)]
 
-  ;; QUESTION: Not sure if the (f) need to be '(f) (i.e., taken out)
   [(where (* σ) (find f Γ))
    --------------------------- "Tracked"
-   (block-type Γ f σ (f) (f))]
+   (block-type Γ f σ none (f))]
 
   ;; QUESTION: Is this the right way to express the terms with arrows on top?
   ;; SANITY-CHECK: Confirm that g_j is an f

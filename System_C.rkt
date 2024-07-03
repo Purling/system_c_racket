@@ -4,7 +4,6 @@
 ;; Symbols for use Γ, σ, τ, →, ⇒
 
 ;; Grammar
-;; TODO: Consider what syntactic sugar you want to add and what you want to remove
 (define-language System_C
   (e x
      0
@@ -31,7 +30,6 @@
   
   (σ (τ ... #\, (f : σ) ... → τ))
 
-  ;; TODO: Define metafunctions which emulate the functionality of sets. (i.e., appending)
   (C (f ...))
 
   (Γ (g ...))
@@ -75,6 +73,22 @@
    or
 
    #f]
+  )
+
+;; Set append metafunction
+(define-metafunction System_C
+  append : f C -> C
+  [(append f (f_1 ... f f_2 ...))
+   (f_1 ... f f_2 ...)]
+
+  [(append f (f f_2 ...))
+   (f f_2 ...)]
+
+  [(append f (f_2 ... f))
+   (f_2 ... f)]
+
+  [(append f C)
+   (C f)]
   )
 
 ;; Subset metafunction
@@ -199,7 +213,7 @@
   ; (statement-type Γ (def f = b #\; s) τ C C)]
 
   ;; RESOLVE: Input/Output
-  ;[(statement-type (Γ (f :* (τ_i ...) → τ_0)) s_1 τ (C \cup (f)) (C \cup (f)))
+  ;[(statement-type (Γ (f :* (τ_i ...) → τ_0)) s_1 τ (C f) (C f))
   ; (statement-type (Γ ((x_i : τ_i) ...) (x_k : C (τ_0 → τ))) s_2 τ C C)
   ; ------------------------------------------------------------------------------------ "Try"
   ; (statement-type Γ (try f ⇒ s_1 with (x_i ... #\, x_k) ⇒ s_2) τ C C)]

@@ -1,7 +1,7 @@
  #lang racket
 (require redex)
 
-;; Symbols for use Γ, σ, τ, →, ⇒
+;; Symbols for use Γ, σ, τ, →, ⇒, ∅
 
 ;; Grammar
 ;; TODO: Add the operational semantics to the grammar
@@ -13,7 +13,7 @@
      (box b))
   
   (b f
-     ((x : τ) ... #\, (f : σ) ... ⇒ s) ;; TODO: Check if this will allow for the case in which there is actually none of one of the types. Or, check if it will be necessary to check for no types. Also, check if there will need to be brackets around the list
+     ((x : τ) ... #\, (f : σ) ... ⇒ s) ;; TODO: Check if this will allow for the case in which there is actually none of one of the types. Or, check if it will be necessary to check for no types.
      (unbox e)
      (l cap))
   
@@ -30,7 +30,9 @@
   
   (σ (τ ... #\, (f : σ) ... → τ))
 
-  (C (f ...))
+  ;; QUESTION: I have added an ∅. Is this necessary and, if so, is my metafunction behaviour accurate?
+  (C (f ...)
+     ∅)
 
   (Γ (g ...))
 
@@ -157,11 +159,18 @@
 
   [(set-append (f) C)
    (append f C)]
+
+  [(set-append ∅ C)
+   C]
+
+  [(set-append C ∅)
+   C]
   )
 
 ;; Subset metafunction
 ;; TODO: Extend this so that the 'superset' is 'unknown'
 ;; TODO: Put as where clause in block typing and statement typing
+;; TODO: Define subset for statement typing
 (define-metafunction System_C
   subset : C C -> boolean
   [(subset (f f_1 ...) (f_2 ... f f_4 ...))
@@ -229,14 +238,14 @@
   ;; TODO: Create a 'c' append which if given a #f, just returns a #f otherwise it returns the appended
   ;; TODO: Make sure that the output 'C' has all f's removed
   ;; TODO: Make sure that the result of the appending is a superset using the subset function
-  [(statement-type (Γ ((x : τ_i) ...) ((f :* σ) ...)) s τ none (C f ...))
+  [(statement-type (Γ (x : τ_i) ... (f :* σ) ...) s τ none (C f ...))
    --------------------------------------------------------------------------------------------- "Block"
-   (block-type Γ (((x : τ_i) ...) #\, ((f : σ) ...) ⇒ s) ((τ_i ...) #\, ((f : σ) ...) → τ) c C)]
+   (block-type Γ ((x : τ_i) ... #\, (f : σ) ... ⇒ s) (τ_i ... #\, (f : σ) ... → τ) c C)]
 
   [(expr-type Γ e (σ at C))
    ----------------------------------------- "BoxElim"
    (block-type Γ (unbox e) σ C C)]
-)
+  )
 
 ;; Typing rule for expression typing
 (define-judgment-form System_C
@@ -247,20 +256,14 @@
    ------------------------------ "Lit"
    (expr-type Γ natural Int)]
 
-  ;; N.B.: We should treat Γ as a lookup dictionary and use the key x to find τ
-  ;; TODO: Change the find metafunction such that it returns either a found type τ or a default value (probably something like #f)
   [(where τ (find x Γ))
    -------------------------- "Var"
    (expr-type Γ x τ)]
 
-  ;; TODO: Create a special value which indicates that we don't know what the C value is
   [(block-type Γ b σ none C)
    ------------------------------- "BoxIntro"
    (expr-type Γ (box b) (σ at C))]
-  
   )
-
-;; TODO: Define subset for statement typing
 
 (define-judgment-form System_C
   #:mode (statement-type I I O I O)
@@ -272,10 +275,9 @@
    ----------------------------------------------------------------------- "Val"
    (statement-type Γ (val x = s_0 #\; s_1) τ_1 none (set-append C_0 C_1))]
 
-  ;; TODO: Make sure that the emptyset is expressed correctly as a null set. (i.e., I don't think it should be expressed as \emptyset. Instead, it should probably be an empty list)
   [(expr-type Γ e τ)
    ---------------------------------------------------- "Ret"
-   (statement-type Γ (return e) τ \emptyset \emptyset)]
+   (statement-type Γ (return e) τ none ∅)]
 
   ;; QUESTION: Have I expressed the multiple of the (expr-type Γ e_i τ_i) and (block-type Γ b_j σ_j C_j C_j) correctly? (i.e., (expr-type Γ e_i τ_i) ... and (block-type Γ b_j σ_j C_j C_j) ...)
   ;; TODO: Figure out the substitution in App for (τ[f_j→C_j]). This will probably just be a redex metafunction or something of the sort.

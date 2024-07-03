@@ -1,10 +1,10 @@
  #lang racket
 (require redex)
 
-;; Symbols for use Γ, σ, τ, →
+;; Symbols for use Γ, σ, τ, →, ⇒
 
-; Grammar
-; Consider what syntactic sugar you want to add and what you want to remove
+;; Grammar
+;; TODO: Consider what syntactic sugar you want to add and what you want to remove
 (define-language System_C
   (e x
      0
@@ -14,22 +14,22 @@
      (box b))
   
   (b f
-     ((x τ) ... #\, (f σ) ... \Rightarrow s) ; Check if this will allow for the case in which there is actually none of one of the types
+     ((x : τ) ... #\, (f : σ) ... ⇒ s) ;; TODO: Check if this will allow for the case in which there is actually none of one of the types. Or, check if it will be necessary to check for no types. Also, check if there will need to be brackets around the list
      (unbox e)
-     (l cap)) ; Operational Semantics
+     (l cap)) ;; QUESTION: Do we actually need these operational semantics here or should we extend them elsewhere?
   
   (s (def f = b #\; s)
-     (b e ... #\, b ... ) ;; QUESTION: Are the two 'b's present different? If not, I will probably need an underscore or something to differentiate
+     (b (e ... #\, b ...)) ;; QUESTION: Are the two 'b's present different? If not, I will probably need an underscore or something to differentiate
      (val x = s #\; s)
      (return e)
-     (try f \Rightarrow s with x ... #\, k \Rightarrow s) ;; QUESTION: Do the ellipses only apply to x
-     (l s with (x ... k) \Rightarrow s )) ; Operational Semantics
+     (try f ⇒ s with (x ... #\, k) ⇒ s) ;; QUESTION: Do the ellipses only apply to x
+     (l s with (x ... k) ⇒ s ))
   
   (τ Int
      Boolean
      (σ at C))
   
-  (σ (\tau ... #\, (f σ) ... \rightarrow τ)) ; Consider adding the #\: back into the f #\: \sigma
+  (σ (τ ... #\, (f : σ) ... → τ)) ;; TODO: Make sure that : is added back into everywhere it needs to be added for typing
 
   ;; TODO: Define metafunctions which emulate the functionality of sets. (i.e., appending)
   (C (f ...))
@@ -44,14 +44,12 @@
 
   (f variable-not-otherwise-mentioned)
 
-  ; Evaluation Context for Contexts
   (E ::= hole
      (#\{ val x = E #\; s #\})
-     (l #\{ E #\} with #\{ (x ... k) => s #\})) ; Not sure the parentheses need to be there for the x ... k. Don't  think they actually add anything of real substance
+     (l #\{ E #\} with #\{ (x ... k) => s #\})) ;; QUESTION: Not sure the parentheses need to be there for the x ... k. Don't  think they actually add anything of real substance
   )
 
-; Clause to determine if every element in a list is in another list (sub list)
-; count (member a) b
+;; TODO: Define metafunction which determines if a set is a subset of another set
 
 ;; Metafunction which attempts to find an element within a list and either returns #f or the element found
 (define-metafunction System_C
@@ -96,11 +94,10 @@
    --------------------------- "Tracked"
    (block-type Γ f σ (f) (f))] ;; QUESTION: Not sure if the (f) need to be '(f) (i.e., taken out)
 
-  ;; TODO: Confirm that this typing rule is valid
-  ; Not sure if '(g ...) is a valid way to express lists
-  [(block-type (append (append (Γ) '((x τ) ...)) '((g σ) ...)) s τ (append (C) '(g ...)) C) ; Define set-append (for now, we use regular list append as placeholder)
-   ------------------------------ "Block"
-   (block-type Γ (((x τ_i) ...) #\, ((g σ) ...) s) τ C C)] ; Check if I need something to distinguish the many different tau's
+  ;; QUESTION: Is this the right way to express the terms with arrows on top?
+  [(statement-type (Γ ((x : τ_i) ...) ((f :* σ) ...)) s τ (C (f ...)) (C (f ...)))
+   --------------------------------------------------------------------------------------------- "Block"
+   (block-type Γ (((x : τ_i) ...) #\, ((f : σ) ...) ⇒ s) ((τ_i ...) #\, ((f : σ) ...) → τ) C C)] ;; TODO: Check if I need something to distinguish the many different tau's. Check if the parentheses are necessary around the (x : τ_i) ... and (f : σ) ...)
 
   [(expr-type Γ e (σ at C))
    ----------------------------------------- "BoxElim"
@@ -112,52 +109,60 @@
   #:mode (expr-type I I I) ;; QUESTION: I think that the mode for expr-type can just be all inputs
   #:contract (expr-type Γ e τ)
   
-  [
+  [(where #t (exact-integer? e)) ;; QUESTION: We may have to escape to Racket to perform this operation?
    ------------------------------ "Lit"
-   (expr-type Γ n Int)] ;; TODO: Look how to force n to be an integer
+   (expr-type Γ e Int)]
 
-  [(expr-type Γ x τ)
-   (side-condition (member x Γ)) ;; TODO: Confirm that this is a correct way of making sure that the side-condition is obeyed
-   ------------------------------ "Var"
+  [(where g (find (x : τ) Γ))
+   -------------------------- "Var"
    (expr-type Γ x τ)]
 
   [(block-type Γ b σ C C)
-   ------------------------------ "BoxIntro"
-   (expr-type Γ (box b) (σ at C))] ;; The C is not yet bound. This is because we need to make it bidirectional (i.e., it both requires and needs C)
+   ------------------------------- "BoxIntro"
+   (expr-type Γ (box b) (σ at C))]
   
   )
 
 ;; TODO: Define substitution for statement typing
 
 (define-judgment-form System_C
-  #:mode (typeof I I I O)
-  #:contract (typeof Γ σ τ C)
+  #:mode (statement-type I I I I O)
+  #:contract (statement-type Γ σ τ C C)
 
-  [(typeof Γ s_0 τ_1 C_0)                      ; \tau_0 unbound variable
-   (typeof (Γ #\, x : τ_1) s_0 τ_1 C_1)     ; (\Gamma #\, x : \tau_0) unbound variable error
-   ------------------------------ "Val"
-   (typeof Γ (val x = s_0 #\; s_1) τ_1 (C_0 \cup C_1))]
+  ;; TODO: Create an append metafunction for sets
+  ;; TODO: Fix problem with unbound variable
+  ;[(statement-type Γ s_0 τ_0 C_0 C_0)
+  ; (statement-type (Γ (x : τ_0)) s_1 τ_1 C_1 C_1)
+  ; --------------------------------------------------------------------------- "Val"
+  ; (statement-type Γ (val x = s_0 #\; s_1) τ_1 (C_0 \cup C_1) (C_0 \cup C_1))] ;; TODO: Replace the \cup with a set append
 
-  [(typeof Γ e \tau C)         ; Same problem as with C. Need to figure out if the C should be C or an emptyset
-   ------------------------------ "Ret"
-   (typeof Γ (return e) \tau \emptyset)]
+  [(expr-type Γ e τ)
+   ---------------------------------------------------- "Ret"
+   (statement-type Γ (return e) τ \emptyset \emptyset)] ;; TODO: Make sure that the emptyset is expressed correctly as a null set. (i.e., I don't think it should be expressed as \emptyset. Instead, it should probably be an empty list)
 
-  ; [(typeof \Gamma f #\: \sigma C)
-  ;  ------------------------------ "App"
-  ; (typeof \Gamma f #\: \sigma f)]
+  ;; QUESTION: How do I express the multiple (expr-type Γ e_i τ_i) and (block-type b_j σ_j C_j)?
+  ;; TODO: Figure out the substitution in App for (τ[f_j→C_j])
+  ;; RESOLVE: Once again, input and output needs to be resolved
+  ;[(block-type Γ b ((τ_i ...) #\, ((f : σ) ...) → τ) C C)
+  ; (expr-type Γ e_i τ_i)
+  ; (block-type Γ b_j σ_j C_j C_j)
+  ;  ----------------------------------------------------- "App"
+  ; (statement-type Γ (b (e_i ... #\, b_j ...)) (τ) (C \cup (C_j ...)) (C \cup (C_j ...)))]
 
-  ; Figure out how to resolve variable unbound
-  ; [(typeof Γ b #\: \sigma C_prime)
-  ; (typeof (Γ #\, f : C_prime \sigma) b #\: \tau C)
-  ; ------------------------------ "Def"
-  ; (typeof Γ (def f = b #\; s) #\: \tau C)]
+  ;; TODO: Confirm logic around the input and output for def
+  ;[(block-type Γ b σ C C_prime)  ;; QUESTION: Confirm logic of the output and input in this instance. (i.e., the typing rule is given C and we output a C_prime)
+  ; (statement-type (Γ (f : C_prime σ)) b τ C C) ;; QUESTION: I still have to wrap my head around the redex and racket stuff. Is (Γ (f : C_prime σ)) a list?
+  ; ------------------------------------------------ "Def"
+  ; (statement-type Γ (def f = b #\; s) τ C C)]
 
-  [(typeof Γ s_1 τ (C \cup #\{ f #\}))      ; (\Gamma #\, f : \star (\tau_i ... \rightarrow \tau_0)) is throwing an error because \tau_1 isn't bound
-   (typeof Γ s_2 τ C)                       ; Once again, this gamme will have to be tinkered around with and figured out
-   ------------------------------ "Try"
-   (typeof Γ (try #\{ f => s_1 #\} with #\{ (x ... #\, k) => s_2 #\} ) τ C)])
+  ;; RESOLVE: Input/Output
+  ;[(statement-type (Γ (f :* (τ_i ...) → τ_0)) s_1 τ (C \cup (f)) (C \cup (f)))
+  ; (statement-type (Γ ((x_i : τ_i) ...) (x_k : C (τ_0 → τ))) s_2 τ C C)
+  ; ------------------------------------------------------------------------------------ "Try"
+  ; (statement-type Γ (try f ⇒ s_1 with (x_i ... #\, x_k) ⇒ s_2) τ C C)]
+  )
 
-; Reduction Rules
+;; Reduction Rules
 (define red
   (reduction-relation System_C ; I sometimes see a domain tag, I am not sure what exactly it is referring to or what it means
 

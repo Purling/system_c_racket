@@ -13,7 +13,7 @@
      (box b))
   
   (b f
-     ((x : τ) ... #\, (f : σ) ... ⇒ s) ;; TODO: Check if this will allow for the case in which there is actually none of one of the types. Or, check if it will be necessary to check for no types.
+     ((x : τ) ... #\, (f : σ) ... ⇒ s)
      (unbox e)
      (l cap))
   
@@ -22,17 +22,16 @@
      (val x = s #\; s)
      (return e)
      (try f ⇒ s with (x ... #\, k) ⇒ s)
-     (l s with (x ... k) ⇒ s ))
+     (l s with (x ... k) ⇒ s))
   
-  (τ Int
-     Boolean
+  (τ integer
+     true
+     false
      (σ at C))
   
   (σ (τ ... #\, (f : σ) ... → τ))
-
-  ;; QUESTION: I have added an ∅. Is this necessary and, if so, is my metafunction behaviour accurate?
-  (C (f ...)
-     ∅)
+  
+  (C (f ...))
 
   (Γ (g ...))
 
@@ -60,7 +59,7 @@
   ;; TODO: Use either gensym or fresh to generate unique runtime labels (this would be for try blocks). If using gensym, use pattern for defining l in the grammar otherwise, fresh will require something else
 
   ;; TODO: Think about the run-time label l
-  (E ::= hole
+  (E hole
      (val x = E #\; s)
      (l E with (x ... #\, k) ⇒ s))
   )
@@ -153,98 +152,62 @@
 
 ;; Set append for appending two sets together
 (define-metafunction System_C
-  set-append : C C -> C
+  set-append : c c -> c
   [(set-append (f f_1 ...) C)
    (set-append (f_1 ...) (append f C))]
 
-  [(set-append (f) C)
-   (append f C)]
-
-  [(set-append ∅ C)
+  [(set-append () C)
    C]
 
-  [(set-append C ∅)
-   C]
+  [(set-append none c)
+   none]
+
+  [(set-append c none)
+   none]
   )
 
 ;; Subset metafunction
-;; TODO: Extend this so that the 'superset' is 'unknown'
-;; TODO: Put as where clause in block typing and statement typing
-;; TODO: Define subset for statement typing
+;; TODO: Put as where clause in block typing and statement typing for the subset rule
 (define-metafunction System_C
-  subset : C C -> boolean
+  subset : C c -> boolean
+  [(subset C none)
+   #t]
+  
   [(subset (f f_1 ...) (f_2 ... f f_4 ...))
-   (subset (f_1 ...) (f_2 ... f f_4 ...))
+   (subset (f_1 ...) (f_2 ... f f_4 ...))]
 
-   or
+  [(subset () (f ...))
+   #t]
 
-   #f]
-  
-  [(subset (f f_1 ...) (f f_2 ...))
-   (subset (f_1 ...) (f f_2 ...))
-
-   or
-
-   #f]
-
-  [(subset (f f_1 ...) (f_2 ... f))
-   (subset (f_1 ...) (f_2 ... f))
-
-   or
-
-   #f]
-
-  [(subset (f) (f_1 ... f f_2 ...))
-   #t
-
-   or
-
-   #f]
-  
-  [(subset (f) (f f_1 ...))
-   #t
-   
-   or
-
-   #f]
-
-  [(subset (f) (f_1 ... f))
-   #t
-
-   or
-
+  [(subset C c)
    #f])
 
-;; TODO: Figure out how exactly substitution would work
-;; TODO: Make sure that the input and output is correct and works correctly
-
 ;; Typing rules for block typing
+;; TODO: Make sure that the input and output is correct and works correctly
 (define-judgment-form System_C
   #:contract (block-type Γ b σ c C)
   #:mode (block-type I I O I O)
 
   [(where (C σ) (find f Γ))
+   (where #t (subset C c))
    ---------------------------- "Transparent"
-   (block-type Γ f σ none C)]
+   (block-type Γ f σ c C)]
 
   [(where (* σ) (find f Γ))
+   (where #t (subset (f) c))
    --------------------------- "Tracked"
-   (block-type Γ f σ none (f))]
+   (block-type Γ f σ c (f))]
 
-  ;; QUESTION: Is this the right way to express the terms with arrows on top?
-  ;; SANITY-CHECK: Confirm that g_j is an f
-  ;; QUESTION: Is there a correct way in which I should be expressing the τ_i's? Is essence, each i is an identifier for a specific τ, so would it matter?
-  ;; TODO: Check if I need something to distinguish the many different τ's. Check if the parentheses are necessary around the ((x : τ_i) ...) and ((f : σ) ...)
-  ;; TODO: Create a 'c' append which if given a #f, just returns a #f otherwise it returns the appended
-  ;; TODO: Make sure that the output 'C' has all f's removed
-  ;; TODO: Make sure that the result of the appending is a superset using the subset function
-  [(statement-type (Γ (x : τ_i) ... (f :* σ) ...) s τ none (C f ...))
+  ;; TODO: Make sure that the output 'C' has all f's removed. Basically, define a metafunction that says that none of the f's exist in larger C. Do this by defining a set minus metafunction
+  ;; TODO: Define a set minus metafunction
+  [(statement-type (Γ (x : τ_i) ... (f :* σ) ...) s τ (set-append c f ...) C)
+   (where #t (subset C (set-append c f ...)))
    --------------------------------------------------------------------------------------------- "Block"
    (block-type Γ ((x : τ_i) ... #\, (f : σ) ... ⇒ s) (τ_i ... #\, (f : σ) ... → τ) c C)]
 
   [(expr-type Γ e (σ at C))
    ----------------------------------------- "BoxElim"
-   (block-type Γ (unbox e) σ C C)]
+   (block-type Γ (unbox e) σ c C)]
   )
 
 ;; Typing rule for expression typing
@@ -261,6 +224,7 @@
    (expr-type Γ x τ)]
 
   [(block-type Γ b σ none C)
+   ;(where #t (subset C C_prime))  ;; QUESTION: Is this needed here? I was going to have (expr-type Γ (box b) (σ at C)
    ------------------------------- "BoxIntro"
    (expr-type Γ (box b) (σ at C))]
   )
@@ -272,27 +236,31 @@
   ;; QUESTION: Is the 'none' correct here? My logic is that, we are getting the C_0 and C_1 from the two statement-type's and these are then given to the output (set-append C_0 C_1)
   [(statement-type Γ s_0 τ_0 none C_0)
    (statement-type (Γ (x : τ_0)) s_1 τ_1 none C_1)
+   (where #t (subset C_0 c))
+   (where #t (subset C_1 c))
    ----------------------------------------------------------------------- "Val"
-   (statement-type Γ (val x = s_0 #\; s_1) τ_1 none (set-append C_0 C_1))]
+   (statement-type Γ (val x = s_0 #\; s_1) τ_1 c (set-append C_0 C_1))]
 
   [(expr-type Γ e τ)
    ---------------------------------------------------- "Ret"
-   (statement-type Γ (return e) τ none ∅)]
+   (statement-type Γ (return e) τ none ∅)] ;;TODO: Change the emptyset
 
-  ;; QUESTION: Have I expressed the multiple of the (expr-type Γ e_i τ_i) and (block-type Γ b_j σ_j C_j C_j) correctly? (i.e., (expr-type Γ e_i τ_i) ... and (block-type Γ b_j σ_j C_j C_j) ...)
-  ;; TODO: Figure out the substitution in App for (τ[f_j→C_j]). This will probably just be a redex metafunction or something of the sort.
+  ;; QUESTION: I am not sure how to define where clauses for the (block-type Γ b_j σ_j C_j C_j) ... (Have a where clause where what we want to match against is a list of #t and then terms are the lists of subset)
+  ;; TODO: Create a flatten function which flattens a list of lists
   [(block-type Γ b (τ_i ... #\, (f : σ) ... → τ) C C)
    (expr-type Γ e_i τ_i) ...
    (block-type Γ b_j σ_j C_j C_j) ...
     -------------------------------------------------------------------------------------------------- "App"
-   (statement-type Γ (b (e_i ... #\, b_j ...)) (τ) (set-append C (C_j ...)) (set-append C (C_j ...)))]
+   (statement-type Γ (b (e_i ... #\, b_j ...)) (substitute τ [f C_j] ...) (set-append C (C_j ...)) (set-append C (C_j ...)))]
 
   [(block-type Γ b σ none C_prime)
    (statement-type (Γ (f : C_prime σ)) s τ C_prime C)
+   (where #t (subset C_prime c))
+   (where #t (subset C c))
    -------------------------------------------- "Def"
-   (statement-type Γ (def f = b #\; s) τ none C)]
+   (statement-type Γ (def f = b #\; s) τ c C)]
 
-  ;; RESOLVE: Input/Output problem with τ_i
+  ;; TODO: Change the grammar slightly such that the x_i's in the with have a type x_i : τ_i
   ;[(statement-type (Γ (f :* (τ_i ... → τ_0))) s_1 τ C (append f C))
   ; (statement-type (Γ (x_i : τ_i) ... (k : C (τ_0 → τ))) s_2 τ C C)
   ; ------------------------------------------------------------------------------------ "Try"
@@ -304,13 +272,17 @@
   ;; TODO: Determine if a 'domain' tag is necessary
   (reduction-relation System_C
 
-   ;(--> (in-hole E (unbox box b)) ; Add in-hole. But, it's complaining that the in-hole may match more than one context at once
-   ;     (b))
-   
-   (--> ((unbox box b)) ; Add in-hole. But, it's complaining that the in-hole may match more than one context at once
-        (b))
+   (--> (in-hole E (val x = E_1 #\; s))
+        (in-hole E E_1))
 
-   (--> (val x = return v #\; s)
+   (--> (in-hole E (l E_1 with (x ... #\, k) ⇒ s))
+        (in-hole E E_1))
+
+   (--> (unbox (box b))
+        b
+        "box")
+
+   (--> (in-hole E (val x = E_1 #\; s))
         (substitute s [x v])) ; May have to define binding forms in order for substitute to work properly
 
    (--> (def f = w #\; s)

@@ -73,6 +73,7 @@
      (l E with (x ... #\, k) ⇒ s))
   )
 
+;; Metafunction which returns the type given an x-or-f (key) and a g which contains the type (value)
 (define-metafunction System_C
   find-helper : x-or-f g -> find-return-type
   [(find-helper x-or-f (x : τ))
@@ -88,6 +89,7 @@
    (side-condition (= (term x-or-f) (term f)))]
 )
 
+;; Metafunction which detects if the key x-or-f is the same as found within the term g
 (define-metafunction System_C
   find-equal : x-or-f g -> boolean
   [(find-equal x-or-f (x : τ))
@@ -144,7 +146,7 @@
   )
 
 ;; Set append metafunction for one element
-;; SANITY CHECK: Even though C is not (f-or-l ...), I don't think that it will require any changes for the set functions. We are not detecting for l outside of the reduction rules.
+;; SANITY CHECK: Even though C is not (f-or-l ...) because it is only (f ...) in this metafunction, I don't think that it will require any changes for the set functions. We are not detecting for l outside of the reduction rules.
 (define-metafunction System_C
   append : f C -> C
   [(append f (f_1 ... f f_2 ...))
@@ -171,7 +173,6 @@
   )
 
 ;; Subset metafunction
-;; TODO: Put as where clause in block typing and statement typing for the subset rule
 (define-metafunction System_C
   subset : C c -> boolean
   [(subset C none)
@@ -192,6 +193,9 @@
   [(set-minus (f f_1 ...) (f_2 ... f f_3 ...))
    (set-minus (f_1 ...) (f_2 ... f_3 ...))]
 
+  [(set-minus (f f_1 ...) (f_2 ...))
+   (set-minus (f_1 ...) (f_2 ...))]
+
   [(set-minus () C)
    C]
 
@@ -199,8 +203,17 @@
    C]
   )
 
+;; Metafunction which flattens a list of lists
+(define-metafunction System_C
+  flatten : (C ...) -> C
+  [(flatten (C C_1 C_2 ...))
+   (flatten ((set-append C C_1) C_2 ...))]
+
+  [(flatten (C))
+   C]
+  )
+
 ;; Typing rules for block typing
-;; TODO: Make sure that the input and output is correct and works correctly
 (define-judgment-form System_C
   #:contract (block-type Γ b σ c C)
   #:mode (block-type I I O I O)
@@ -215,13 +228,15 @@
    --------------------------- "Tracked"
    (block-type Γ f σ c (f))]
 
-  ;; TODO: Make sure that the output is a subset of the superset c
-  [(statement-type (Γ (x : τ_i) ... (f :* σ) ...) s τ (set-append c f ...) C)
-   (where #t (subset C (set-append c f ...)))
+  ;; QUESTION: Uncertain about the (where #t (subset C c)) because it seems like it covers (where #t (subset C (set-append c (f ...))))
+  [(statement-type (Γ (x : τ_i) ... (f :* σ) ...) s τ (set-append c (f ...)) C)
+   (where #t (subset C (set-append c (f ...))))
+   (where #t (subset C c))
    --------------------------------------------------------------------------------------------- "Block"
    (block-type Γ ((x : τ_i) ... #\, (f : σ) ... ⇒ s) (τ_i ... #\, (f : σ) ... → τ) c (set-minus (f ...) C))]
 
   [(expr-type Γ e (σ at C))
+   (where #t (subset C c))
    ----------------------------------------- "BoxElim"
    (block-type Γ (unbox e) σ c C)]
   )
@@ -240,7 +255,6 @@
    (expr-type Γ x τ)]
 
   [(block-type Γ b σ none C)
-   ;(where #t (subset C C_prime))  ;; QUESTION: Is this needed here? I was going to have (expr-type Γ (box b) (σ at C)
    ------------------------------- "BoxIntro"
    (expr-type Γ (box b) (σ at C))]
   )
@@ -249,9 +263,8 @@
   #:mode (statement-type I I O I O)
   #:contract (statement-type Γ σ τ c C)
 
-  ;; QUESTION: Is the 'none' correct here? My logic is that, we are getting the C_0 and C_1 from the two statement-type's and these are then given to the output (set-append C_0 C_1)
-  [(statement-type Γ s_0 τ_0 none C_0)
-   (statement-type (Γ (x : τ_0)) s_1 τ_1 none C_1)
+  [(statement-type Γ s_0 τ_0 c C_0)
+   (statement-type (Γ (x : τ_0)) s_1 τ_1 c C_1)
    (where #t (subset C_0 c))
    (where #t (subset C_1 c))
    ----------------------------------------------------------------------- "Val"
@@ -259,28 +272,32 @@
 
   [(expr-type Γ e τ)
    ---------------------------------------------------- "Ret"
-   (statement-type Γ (return e) τ none ∅)] ;;TODO: Change the emptyset
+   (statement-type Γ (return e) τ c ())]
 
-  ;; QUESTION: I am not sure how to define where clauses for the (block-type Γ b_j σ_j C_j C_j) ... (Have a where clause where what we want to match against is a list of #t and then terms are the lists of subset)
-  ;; TODO: Create a flatten function which flattens a list of lists
-  [(block-type Γ b (τ_i ... #\, (f : σ) ... → τ) C C)
+  ;; QUESTION: Uncertain about the subset rule which is encoded by (where (#t ...) ((subset C_j c) ... )). Also not sure if the substitution (substitute τ [f C_j] ...) works as intended.
+  [(block-type Γ b (τ_i ... #\, (f : σ) ... → τ) c C)
    (expr-type Γ e_i τ_i) ...
-   (block-type Γ b_j σ_j C_j C_j) ...
+   (block-type Γ b_j σ_j c C_j) ...
+   (where #t (subset C c))
+   (where (#t ...) ((subset C_j c) ... ))
     -------------------------------------------------------------------------------------------------- "App"
-   (statement-type Γ (b (e_i ... #\, b_j ...)) (substitute τ [f C_j] ...) (set-append C (C_j ...)) (set-append C (C_j ...)))]
+   (statement-type Γ (b (e_i ... #\, b_j ...)) (substitute τ [C_j f] ...) c (set-append (flatten (C_j ...)) C))]
 
-  [(block-type Γ b σ none C_prime)
-   (statement-type (Γ (f : C_prime σ)) s τ C_prime C)
+  [(block-type Γ b σ c C_prime)
+   (statement-type (Γ (f : C_prime σ)) s τ c C)
    (where #t (subset C_prime c))
    (where #t (subset C c))
    -------------------------------------------- "Def"
    (statement-type Γ (def f = b #\; s) τ c C)]
 
   ;; QUESTION: Is the inference for the continuation (k : τ) correct?
-  [(statement-type (Γ (f :* (τ_i ... → τ_0))) s_1 τ C (append f C))
-   (statement-type (Γ (x_i : τ_i) ... (k : C (τ_0 → τ))) s_2 τ C C)
+  ;; QUESTION: Uncertain about the (where #t (subset C c)) because it seems like it covers (where #t (subset C (append f c)))
+  [(statement-type (Γ (f :* (τ_i ... → τ_0))) s_1 τ (append f c) C)
+   (statement-type (Γ (x_i : τ_i) ... (k : C (τ_0 → τ))) s_2 τ c C)
+   (where #t (subset C c))
+   (where #t (subset C (append f c)))
    ------------------------------------------------------------------------------------ "Try"
-   (statement-type Γ (try f ⇒ s_1 with ((x_i : τ_i) ... #\, (k : τ_0)) ⇒ s_2) τ C C)]
+   (statement-type Γ (try f ⇒ s_1 with ((x_i : τ_i) ... #\, (k : τ_0)) ⇒ s_2) τ c (set-minus (f) C))]
   )
 
 ;; Reduction Rules
@@ -309,21 +326,19 @@
         (substitute s [f b])
         "def")
 
-   ;; QUESTION: I have added the types in to make the type inference more explicit - I also don't know if this is necessary.
    (--> (l (return e) with h)
         e
         "ret")
 
-   ;; TODO: Implement correct subsitution where multiple variables are undergoing substitution.
-   (--> ((x ... f ...) ⇒ s (v ... w ...))
-        (substitute* s [x ... v] [f ... C] [f ... w])
+   ;; QUESTION: Not entirely sure how to encode the 'where' clause of the rule. As a result, the substitution is supposed to be (substitute s [e x] ... [C f] ... [b f] ...) but I have removed the [C f] because C does not exist.
+   (--> (((x : τ) ... #\, (f : σ) ⇒ s) (e ... #\, b ...))
+        (substitute s [e x] ... [b f] ...)
         "app")
 
    ;; TODO: Generate a new l (either using fresh or gensym) and put it in the place of the l
-   ;; TODO: Check that the substitution is accurate
    ;; TODO: Add the where clause
    (--> (try f ⇒ s with ((x : τ_i) ... #\, (k : τ)) ⇒ s_prime)
-        (l (substitute* s [f (l)] [f (cap l)]) with ((x : τ_i) ... #\, (k : τ)) ⇒ s_prime)
+        (l (substitute s [(l) f] [(cap l) f]) with ((x : τ_i) ... #\, (k : τ)) ⇒ s_prime)
         "try")
 
    ;; TODO: Figure out how to represent the cap reduction rule

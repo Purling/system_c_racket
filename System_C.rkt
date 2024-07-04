@@ -1,10 +1,10 @@
  #lang racket
 (require redex)
 
-;; Symbols for use Γ, σ, τ, →, ⇒, ∅
+;; Symbols for use Γ, σ, τ, →, ⇒, Ξ
 
 ;; Grammar
-;; TODO: Add the operational semantics to the grammar
+;; TODO: Add the operational semantics to the grammar (specifically, the runtime signatures)
 (define-language System_C
   (e x
      natural
@@ -15,14 +15,14 @@
   (b f
      ((x : τ) ... #\, (f : σ) ... ⇒ s)
      (unbox e)
-     (l cap))
+     (cap l))
   
   (s (def f = b #\; s)
      (b (e ... #\, b ...))
      (val x = s #\; s)
      (return e)
-     (try f ⇒ s with (x ... #\, k) ⇒ s)
-     (l s with (x ... k) ⇒ s))
+     (try f ⇒ s with ((x : τ) ... #\, (k : τ)) ⇒ s)
+     (l s with ((x : τ) ... #\, (k : τ)) ⇒ s))
   
   (τ integer
      true
@@ -30,7 +30,8 @@
      (σ at C))
   
   (σ (τ ... #\, (f : σ) ... → τ))
-  
+
+  ;; TODO: Add the l into here. It will probably look something like (f-or-l ...). Adapt everything accordingly.
   (C (f ...))
 
   (Γ (g ...))
@@ -47,6 +48,13 @@
   (f variable-not-otherwise-mentioned)
 
   (k variable-not-otherwise-mentioned)
+
+  (Ξ (r ...))
+
+  (r (l : τ ... → τ))
+
+  ;; QUESTION: I have defined a h here which is ((x : τ_i) ... #\, (k : τ)) ⇒ s because in the reduction rules, we are presented with a h and I am pretty sure that this is what h represents.
+  (h ((x : τ_i) ... #\, (k : τ)) ⇒ s)
 
   (x-or-f x
           f)
@@ -260,11 +268,11 @@
    -------------------------------------------- "Def"
    (statement-type Γ (def f = b #\; s) τ c C)]
 
-  ;; TODO: Change the grammar slightly such that the x_i's in the with have a type x_i : τ_i
-  ;[(statement-type (Γ (f :* (τ_i ... → τ_0))) s_1 τ C (append f C))
-  ; (statement-type (Γ (x_i : τ_i) ... (k : C (τ_0 → τ))) s_2 τ C C)
-  ; ------------------------------------------------------------------------------------ "Try"
-  ; (statement-type Γ (try f ⇒ s_1 with (x_i ... #\, x_k) ⇒ s_2) τ C C)]
+  ;; QUESTION: Is the inference for the continuation (k : τ) correct?
+  [(statement-type (Γ (f :* (τ_i ... → τ_0))) s_1 τ C (append f C))
+   (statement-type (Γ (x_i : τ_i) ... (k : C (τ_0 → τ))) s_2 τ C C)
+   ------------------------------------------------------------------------------------ "Try"
+   (statement-type Γ (try f ⇒ s_1 with ((x_i : τ_i) ... #\, (k : τ_0)) ⇒ s_2) τ C C)]
   )
 
 ;; Reduction Rules
@@ -272,6 +280,7 @@
   ;; TODO: Determine if a 'domain' tag is necessary
   (reduction-relation System_C
 
+   ;; SANITY CHECK: Does the in-hole make sense. The way I have understood it, the in-hole is a way of defining the evaluation contexts.
    (--> (in-hole E (val x = E_1 #\; s))
         (in-hole E E_1))
 
@@ -282,19 +291,35 @@
         b
         "box")
 
-   (--> (in-hole E (val x = E_1 #\; s))
-        (substitute s [x v])) ; May have to define binding forms in order for substitute to work properly
+   ;; TODO: Check if I have to define a binding forms in order for substitute to work properly
+   (--> (val x = return e #\; s)
+        (substitute s [x e])
+        "val")
 
-   (--> (def f = w #\; s)
-        (substitute s [f w])) ; Make sure that the substitute parameters are given the right way (i.e., [f w] or [w f])
+   (--> (def f = b #\; s)
+        (substitute s [f b])
+        "def")
 
-   (--> (l (return v) with h)
-        (v))
+   ;; QUESTION: I have added the types in to make the type inference more explicit - I also don't know if this is necessary.
+   (--> (l (return e) with h)
+        e
+        "ret")
 
-   ;(--> (#\{ (x ... f ...) => s #\} (v ... w ...))
-   ;     (substitute* s [x v] [f C] [f w])) ; Not sure how to include the where or how to do the substitution with many variables
+   ;; TODO: Implement correct subsitution where multiple variables are undergoing substitution.
+   (--> ((x ... f ...) ⇒ s (v ... w ...))
+        (substitute* s [x ... v] [f ... C] [f ... w])
+        "app")
 
-   (--> (try #\{ f => s #\} with #\{ (x ... k) => s_prime #\}) ; Not sure if that is how primes are done
-        (l #\{ substitute* s [f #\{ l #\}] [f l cap] #\} with #\{ (x... k) => s_prime #\})) ; Elipses are wrong but throwing datum: no pattern variables before ellipsis in template
+   ;; TODO: Generate a new l (either using fresh or gensym) and put it in the place of the l
+   ;; TODO: Check that the substitution is accurate
+   ;; TODO: Add the where clause
+   (--> (try f ⇒ s with ((x : τ_i) ... #\, (k : τ)) ⇒ s_prime)
+        (l (substitute* s [f (l)] [f (cap l)]) with ((x : τ_i) ... #\, (k : τ)) ⇒ s_prime)
+        "try")
+
+   ;; TODO: Figure out how to represent the cap reduction rule
+   ;(--> (in-hole E (l (E_1) with h))
+   ;     (in-hole E E_1)
+   ;     "cap")
    
    ))

@@ -73,6 +73,16 @@
      (l E with (x ... #\, k) ⇒ s))
   )
 
+;; Metafunction to find whether a l is in a Ξ
+(define-metafunction System_C
+  find-signature : l Ξ -> boolean
+  [(find-signature l ((l_1 : τ ... → τ_1) ... (l : τ_2 ... → τ_3) (l_2 : τ_4 ... → τ_5) ...))
+   #t]
+
+  [(find-signature l Ξ)
+   #f]
+  )
+
 ;; Metafunction which returns the type given an x-or-f (key) and a g which contains the type (value)
 (define-metafunction System_C
   find-helper : x-or-f g -> find-return-type
@@ -274,7 +284,7 @@
    ---------------------------------------------------- "Ret"
    (statement-type Γ (return e) τ c ())]
 
-  ;; QUESTION: Uncertain about the subset rule which is encoded by (where (#t ...) ((subset C_j c) ... )). Also not sure if the substitution (substitute τ [f C_j] ...) works as intended.
+  ;; QUESTION: Uncertain about the subset rule which is encoded by (where (#t ...) ((subset C_j c) ... )). Also not sure if the substitution (substitute τ [C_j f] ...) works as intended.
   [(block-type Γ b (τ_i ... #\, (f : σ) ... → τ) c C)
    (expr-type Γ e_i τ_i) ...
    (block-type Γ b_j σ_j c C_j) ...
@@ -301,10 +311,11 @@
   )
 
 ;; Reduction Rules
-;; TODO: Use either gensym or fresh to generate unique runtime labels (this would be for try blocks). If using gensym, use pattern for defining l in the grammar otherwise, fresh will require something else
 (define reduction
-  ;; TODO: Determine if a 'domain' tag is necessary
-  (reduction-relation System_C
+  (reduction-relation
+   System_C
+   ;; SANITY CHECK: Currently, I am treated the domain like a context window. I don't know if this is exactly what it is meant for.
+   #:domain E
 
    ;; SANITY CHECK: Does the in-hole make sense. The way I have understood it, the in-hole is a way of defining the evaluation contexts.
    (--> (in-hole E (val x = E_1 #\; s))
@@ -317,13 +328,13 @@
         b
         "box")
 
-   ;; TODO: Check if I have to define a binding forms in order for substitute to work properly
+   ;; QUESTION: The documentation https://docs.racket-lang.org/redex/Languages.html#%28form._%28%28lib._redex%2Freduction-semantics..rkt%29._substitute%29%29 refers to binding forms. I am not sure what that is referring to.
    (--> (val x = return e #\; s)
-        (substitute s [x e])
+        (substitute s [e x])
         "val")
 
    (--> (def f = b #\; s)
-        (substitute s [f b])
+        (substitute s [b f])
         "def")
 
    (--> (l (return e) with h)
@@ -335,13 +346,14 @@
         (substitute s [e x] ... [b f] ...)
         "app")
 
-   ;; TODO: Generate a new l (either using fresh or gensym) and put it in the place of the l
-   ;; TODO: Add the where clause
+   ;; QUESTION: I am not sure where exactly to generate the new l (which we will generate using 'fresh').
+   ;; QUESTION: I am not sure how I am suppposed to add to the runtime signatures. Where would this be stored?
    (--> (try f ⇒ s with ((x : τ_i) ... #\, (k : τ)) ⇒ s_prime)
         (l (substitute s [(l) f] [(cap l) f]) with ((x : τ_i) ... #\, (k : τ)) ⇒ s_prime)
+        (where #f (find-signature l Ξ))
         "try")
 
-   ;; TODO: Figure out how to represent the cap reduction rule
+   ;; QUESTION: I am not completely sure how to represent the cap reduction rule
    ;(--> (in-hole E (l (E_1) with h))
    ;     (in-hole E E_1)
    ;     "cap")

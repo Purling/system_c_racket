@@ -4,7 +4,6 @@
 ;; Symbols for use Γ, σ, τ, →, ⇒, Ξ
 
 ;; Grammar
-;; TODO: Add the operational semantics to the grammar (specifically, the runtime signatures)
 (define-language System_C
   (e x
      natural
@@ -31,8 +30,7 @@
   
   (σ (τ ... #\, (f : σ) ... → τ))
 
-  ;; TODO: Add the l into here. It will probably look something like (f-or-l ...). Adapt everything accordingly.
-  (C (f ...))
+  (C (f-or-l ...))
 
   (Γ (g ...))
 
@@ -47,7 +45,13 @@
 
   (f variable-not-otherwise-mentioned)
 
+  (f-or-l f
+          l)
+
   (k variable-not-otherwise-mentioned)
+
+  ;; SANITY CHECK: https://docs.racket-lang.org/redex/Reduction_Relations.html indicates that the "Fresh variable clauses generate variables". Thus, I am pretty sure that fresh generates variables.
+  (l variable)
 
   (Ξ (r ...))
 
@@ -64,9 +68,6 @@
                     τ
                     #f)
 
-  ;; TODO: Use either gensym or fresh to generate unique runtime labels (this would be for try blocks). If using gensym, use pattern for defining l in the grammar otherwise, fresh will require something else
-
-  ;; TODO: Think about the run-time label l
   (E hole
      (val x = E #\; s)
      (l E with (x ... #\, k) ⇒ s))
@@ -143,16 +144,11 @@
   )
 
 ;; Set append metafunction for one element
+;; SANITY CHECK: Even though C is not (f-or-l ...), I don't think that it will require any changes for the set functions. We are not detecting for l outside of the reduction rules.
 (define-metafunction System_C
   append : f C -> C
   [(append f (f_1 ... f f_2 ...))
    (f_1 ... f f_2 ...)]
-
-  [(append f (f f_2 ...))
-   (f f_2 ...)]
-
-  [(append f (f_2 ... f))
-   (f_2 ... f)]
 
   [(append f C)
    (C f)]
@@ -181,14 +177,27 @@
   [(subset C none)
    #t]
   
-  [(subset (f f_1 ...) (f_2 ... f f_4 ...))
-   (subset (f_1 ...) (f_2 ... f f_4 ...))]
+  [(subset (f f_1 ...) (f_2 ... f f_3 ...))
+   (subset (f_1 ...) (f_2 ... f f_3 ...))]
 
-  [(subset () (f ...))
+  [(subset () C)
    #t]
 
   [(subset C c)
    #f])
+
+;; Set minus metafunction
+(define-metafunction System_C
+  set-minus : C C -> C
+  [(set-minus (f f_1 ...) (f_2 ... f f_3 ...))
+   (set-minus (f_1 ...) (f_2 ... f_3 ...))]
+
+  [(set-minus () C)
+   C]
+
+  [(set-minus C ())
+   C]
+  )
 
 ;; Typing rules for block typing
 ;; TODO: Make sure that the input and output is correct and works correctly
@@ -206,12 +215,11 @@
    --------------------------- "Tracked"
    (block-type Γ f σ c (f))]
 
-  ;; TODO: Make sure that the output 'C' has all f's removed. Basically, define a metafunction that says that none of the f's exist in larger C. Do this by defining a set minus metafunction
-  ;; TODO: Define a set minus metafunction
+  ;; TODO: Make sure that the output is a subset of the superset c
   [(statement-type (Γ (x : τ_i) ... (f :* σ) ...) s τ (set-append c f ...) C)
    (where #t (subset C (set-append c f ...)))
    --------------------------------------------------------------------------------------------- "Block"
-   (block-type Γ ((x : τ_i) ... #\, (f : σ) ... ⇒ s) (τ_i ... #\, (f : σ) ... → τ) c C)]
+   (block-type Γ ((x : τ_i) ... #\, (f : σ) ... ⇒ s) (τ_i ... #\, (f : σ) ... → τ) c (set-minus (f ...) C))]
 
   [(expr-type Γ e (σ at C))
    ----------------------------------------- "BoxElim"
@@ -276,6 +284,7 @@
   )
 
 ;; Reduction Rules
+;; TODO: Use either gensym or fresh to generate unique runtime labels (this would be for try blocks). If using gensym, use pattern for defining l in the grammar otherwise, fresh will require something else
 (define reduction
   ;; TODO: Determine if a 'domain' tag is necessary
   (reduction-relation System_C

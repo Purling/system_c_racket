@@ -241,24 +241,24 @@
 
   [(where (C σ) (find f Γ))
    (where #t (subset C c))
-   ---------------------------- "Transparent"
+   ------------------------ "Transparent"
    (block-type Γ f σ c C)]
 
   [(where (* σ) (find f Γ))
    (where #t (subset (f) c))
-   --------------------------- "Tracked"
+   ------------------------- "Tracked"
    (block-type Γ f σ c (f))]
 
   ;; QUESTION: Uncertain about the (where #t (subset C c)) because it seems like it covers (where #t (subset C (set-append c (f ...))))
   [(statement-type (g ... (x : τ_i) ... (f :* σ) ...) s τ (set-append c (f ...)) C)
    (where #t (subset C (set-append c (f ...))))
    (where #t (subset C c))
-   --------------------------------------------------------------------------------------------- "Block"
+   --------------------------------------------------------------------------------------------------------------- "Block"
    (block-type (g ...) ((x : τ_i) ... #\, (f : σ) ... ⇒ s) (τ_i ... #\, (f : σ) ... → τ) c (set-minus (f ...) C))]
 
   [(expr-type Γ e (σ at C))
    (where #t (subset C c))
-   ----------------------------------------- "BoxElim"
+   ------------------------------- "BoxElim"
    (block-type Γ (unbox e) σ c C)]
   )
 
@@ -268,11 +268,11 @@
   #:contract (expr-type Γ e τ)
 
   [
-   ------------------------------ "Lit"
+   --------------------------- "Lit"
    (expr-type Γ natural Int)]
 
   [(where τ (find x Γ))
-   -------------------------- "Var"
+   -------------------- "Var"
    (expr-type Γ x τ)]
 
   [(block-type Γ b σ none C)
@@ -288,11 +288,11 @@
    (statement-type (g ... (x : τ_0)) s_1 τ_1 c C_1)
    (where #t (subset C_0 c))
    (where #t (subset C_1 c))
-   ----------------------------------------------------------------------- "Val"
+   -------------------------------------------------------------------------- "Val"
    (statement-type (g ...) (val x = s_0 #\; s_1) τ_1 c (set-append C_0 C_1))]
 
   [(expr-type Γ e τ)
-   ---------------------------------------------------- "Ret"
+   ------------------------------------- "Ret"
    (statement-type Γ (return e) τ c ())]
 
   ;; QUESTION: Uncertain about the subset rule which is encoded by (where (#t ...) ((subset C_j c) ... )). Also not sure if the substitution (substitute τ [C_j f] ...) works as intended.
@@ -301,7 +301,7 @@
    (block-type Γ b_j σ_j c C_j) ...
    (where #t (subset C c))
    (where (#t ...) ((subset C_j c) ... ))
-    -------------------------------------------------------------------------------------------------- "App"
+    ------------------------------------------------------------------------------------------------------------ "App"
    (statement-type Γ (b (e_i ... #\, b_j ...)) (substitute τ [f C_j] ...) c (set-append (flatten (C_j ...)) C))]
 
   [(block-type (g ...) b σ c C_prime)
@@ -317,7 +317,7 @@
    (statement-type (g ... (x_i : τ_i) ... (k : C (τ_0 → τ))) s_2 τ c C)
    (where #t (subset C c))
    (where #t (subset C (append f c)))
-   ------------------------------------------------------------------------------------ "Try"
+   -------------------------------------------------------------------------------------------------------- "Try"
    (statement-type (g ...) (try f ⇒ s_1 with ((x_i : τ_i) ... #\, (k : τ_0)) ⇒ s_2) τ c (set-minus (f) C))]
   )
 

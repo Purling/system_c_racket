@@ -23,9 +23,8 @@
      (try f ⇒ s with ((x : τ) ... #\, (k : τ)) ⇒ s)
      (l s with ((x : τ) ... #\, (k : τ)) ⇒ s))
   
-  (τ integer
-     true
-     false
+  (τ Int
+     Boolean
      (σ at C))
   
   (σ (τ ... #\, (f : σ) ... → τ))

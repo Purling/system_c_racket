@@ -1,0 +1,41 @@
+# Safe Blocks
+`def return_0 = (() ⇒ (return 0)) #\; return 1`
+
+# Safe Boxing and Unboxing
+
+## Boxing
+
+`box (() ⇒ (return 0))`
+
+## Unboxing
+
+`unbox 0`
+
+## Both
+
+`def block_var = (unbox 0) \#; return (box block_var)`
+
+`box (unbox 0)`
+
+`unbox (box b)`
+
+# Unsafe Boxing and Unboxing
+
+## Unboxing
+`unbox (return 1)`
+
+`unbox (val one = return 1 #\; return 2)`
+
+### Type
+
+`unbox Int`
+
+### Environment
+
+`unbox ()`
+
+`unbox (1 : Int)`
+
+# Safe Statements
+
+`val var_x = return 1 \#; return var_x`

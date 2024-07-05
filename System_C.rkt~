@@ -3,8 +3,6 @@
 
 ;; Symbols for use Γ, σ, τ, →, ⇒, Ξ
 
-;; TODO: Encode unit tests and things of the sort using test-judgment-holds, etc. (judgment-holds (statement-type () (return (box ( #\, ⇒ (return 0)))) τ none C) τ) and (apply-reduction-relation)
-
 ;; Grammar
 (define-language System_C
   (e x
@@ -240,11 +238,11 @@
    (block-type Γ f σ c (f))]
 
   ;; QUESTION: Uncertain about the (where #t (subset C c)) because it seems like it covers (where #t (subset C (set-append c (f ...))))
-  [(statement-type (g ... (x : τ_i) ... (f :* σ) ...) s τ (set-append c (f ...)) C)
+  [(statement-type (Γ (x : τ_i) ... (f :* σ) ...) s τ (set-append c (f ...)) C)
    (where #t (subset C (set-append c (f ...))))
    (where #t (subset C c))
    --------------------------------------------------------------------------------------------- "Block"
-   (block-type (g ...) ((x : τ_i) ... #\, (f : σ) ... ⇒ s) (τ_i ... #\, (f : σ) ... → τ) c (set-minus (f ...) C))]
+   (block-type Γ ((x : τ_i) ... #\, (f : σ) ... ⇒ s) (τ_i ... #\, (f : σ) ... → τ) c (set-minus (f ...) C))]
 
   [(expr-type Γ e (σ at C))
    (where #t (subset C c))
@@ -272,7 +270,7 @@
 
 (define-judgment-form System_C
   #:mode (statement-type I I O I O)
-  #:contract (statement-type Γ s τ c C)
+  #:contract (statement-type Γ σ τ c C)
 
   [(statement-type Γ s_0 τ_0 c C_0)
    (statement-type (Γ (x : τ_0)) s_1 τ_1 c C_1)
@@ -303,7 +301,6 @@
 
   ;; QUESTION: Is the inference for the continuation (k : τ) correct?
   ;; QUESTION: Uncertain about the (where #t (subset C c)) because it seems like it covers (where #t (subset C (append f c)))
-  ;; TODO: Change the Γ to be like (g ...) like block
   [(statement-type (Γ (f :* (τ_i ... → τ_0))) s_1 τ (append f c) C)
    (statement-type (Γ (x_i : τ_i) ... (k : C (τ_0 → τ))) s_2 τ c C)
    (where #t (subset C c))
@@ -317,7 +314,7 @@
   (reduction-relation
    System_C
    ;; SANITY CHECK: Currently, I am treated the domain like a context window. I don't know if this is exactly what it is meant for.
-   #:domain s
+   #:domain E
 
    ;; SANITY CHECK: Does the in-hole make sense. The way I have understood it, the in-hole is a way of defining the evaluation contexts.
    (--> (in-hole E (val x = E_1 #\; s))

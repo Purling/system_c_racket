@@ -4,6 +4,7 @@
 ;; Symbols for use Γ, σ, τ, →, ⇒, Ξ
 
 ;; TODO: Encode unit tests and things of the sort using test-judgment-holds, etc. (judgment-holds (statement-type () (return (box ( #\, ⇒ (return 0)))) τ none C) τ) and (apply-reduction-relation)
+;; TODO: Define binding forms for things which are being bound. def, val, try and block definitions. General rule of thumb is that we want to shadow x and f by s and b usually
 
 ;; Grammar
 (define-language System_C
@@ -12,6 +13,15 @@
      true
      false
      (box b))
+
+  (v natural
+     true
+     false
+     (box w))
+
+  (w ((x : τ) ... #\, (f : σ) ... ⇒ s)
+     (unbox v)
+     (cap l))
   
   (b f
      ((x : τ) ... #\, (f : σ) ... ⇒ s)
@@ -22,7 +32,7 @@
      (b (e ... #\, b ...))
      (val x = s #\; s)
      (return e)
-     (try f ⇒ s with ((x : τ) ... #\, (k : τ)) ⇒ s)
+     (try f ⇒ s with h)
      (l s with ((x : τ) ... #\, (k : τ)) ⇒ s))
   
   (τ Int
@@ -58,8 +68,8 @@
 
   (r (l : τ ... → τ))
 
-  ;; QUESTION: I have defined a h here which is ((x : τ_i) ... #\, (k : τ)) ⇒ s because in the reduction rules, we are presented with a h and I am pretty sure that this is what h represents.
-  (h ((x : τ_i) ... #\, (k : τ)) ⇒ s)
+  ;; TODO: Make sure that if I have ((x : τ_i) ... #\, (k : τ)) ⇒ s) in the type checking rules, that it is surrounded by parentheses
+  (h (((x : τ_i) ... #\, (k : τ)) ⇒ s))
 
   (x-or-f x
           f)
@@ -316,10 +326,9 @@
 (define reduction
   (reduction-relation
    System_C
-   ;; SANITY CHECK: Currently, I am treated the domain like a context window. I don't know if this is exactly what it is meant for.
    #:domain s
 
-   ;; SANITY CHECK: Does the in-hole make sense. The way I have understood it, the in-hole is a way of defining the evaluation contexts.
+   ;; TODO: Write up the reduction rules so that they are (in-hole E (the reduction rule))
    (--> (in-hole E (val x = E_1 #\; s))
         (in-hole E E_1))
 
@@ -330,7 +339,8 @@
         b
         "box")
 
-   ;; QUESTION: The documentation https://docs.racket-lang.org/redex/Languages.html#%28form._%28%28lib._redex%2Freduction-semantics..rkt%29._substitute%29%29 refers to binding forms. I am not sure what that is referring to.
+   ;; NOTE: x ⇒ v is x being replaced with v
+   ;; TODO: Replace e and b with v and w where appropriate
    (--> (val x = return e #\; s)
         (substitute s [e x])
         "val")
@@ -343,19 +353,19 @@
         e
         "ret")
 
-   ;; QUESTION: Not entirely sure how to encode the 'where' clause of the rule. As a result, the substitution is supposed to be (substitute s [e x] ... [C f] ... [b f] ...) but I have removed the [C f] because C does not exist.
+   ;; TODO: Put in the w_j σ_j C_j by using judgment-holds and the typing rules
+   ;; TODO: Make the substitution (substitute s [e x] ... [C f] ... [b f] ...)
    (--> (((x : τ) ... #\, (f : σ) ⇒ s) (e ... #\, b ...))
         (substitute s [e x] ... [b f] ...)
         "app")
 
-   ;; QUESTION: I am not sure where exactly to generate the new l (which we will generate using 'fresh').
-   ;; QUESTION: I am not sure how I am suppposed to add to the runtime signatures. Where would this be stored?
+   ;; TODO: Add the Ξ as an input into the typing rules. We can add it into the environment Γ
    (--> (try f ⇒ s with ((x : τ_i) ... #\, (k : τ)) ⇒ s_prime)
         (l (substitute s [(l) f] [(cap l) f]) with ((x : τ_i) ... #\, (k : τ)) ⇒ s_prime)
-        (where #f (find-signature l Ξ))
+        (fresh l)
         "try")
 
-   ;; QUESTION: I am not completely sure how to represent the cap reduction rule
+   ;; TODO: Use two in-holes to represent cap
    ;(--> (in-hole E (l (E_1) with h))
    ;     (in-hole E E_1)
    ;     "cap")

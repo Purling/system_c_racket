@@ -5,22 +5,24 @@
 
 ;; TODO: Encode unit tests and things of the sort using test-judgment-holds, etc. (judgment-holds (statement-type () (return (box ( #\, ⇒ (return 0)))) τ none C) τ) and (apply-reduction-relation)
 ;; TODO: Define binding forms for things which are being bound. def, val, try and block definitions. General rule of thumb is that we want to shadow x and f by s and b usually
+;; TODO: For sanity's sake, name things with an underscore if they are different even if it might not be strictly necessary to do so.
 
 ;; Grammar
 (define-language System_C
   (e x
+     ()
      natural
      true
      false
      (box b))
 
   (v natural
+     ()
      true
      false
      (box w))
 
   (w ((x : τ) ... #\, (f : σ) ... ⇒ s)
-     (unbox v)
      (cap l))
   
   (b f
@@ -33,11 +35,13 @@
      (val x = s #\; s)
      (return e)
      (try f ⇒ s with h)
-     (l s with ((x : τ) ... #\, (k : τ)) ⇒ s))
+     (l s with h))
   
   (τ Int
      Boolean
      (σ at C))
+
+  (l-τ (τ_i ... → τ))
   
   (σ (τ ... #\, (f : σ) ... → τ))
 
@@ -47,7 +51,8 @@
 
   (g (x : τ)
      (f :* σ)
-     (f : C σ))
+     (f : C σ)
+     (l : τ ... → τ))
 
   (c none
      C)
@@ -64,11 +69,6 @@
   ;; SANITY CHECK: https://docs.racket-lang.org/redex/Reduction_Relations.html indicates that the "Fresh variable clauses generate variables". Thus, I am pretty sure that fresh generates variables.
   (l variable)
 
-  (Ξ (r ...))
-
-  (r (l : τ ... → τ))
-
-  ;; TODO: Make sure that if I have ((x : τ_i) ... #\, (k : τ)) ⇒ s) in the type checking rules, that it is surrounded by parentheses
   (h (((x : τ_i) ... #\, (k : τ)) ⇒ s))
 
   (x-or-f x
@@ -284,12 +284,12 @@
   #:mode (statement-type I I O I O)
   #:contract (statement-type Γ s τ c C)
 
-  [(statement-type Γ s_0 τ_0 c C_0)
-   (statement-type (Γ (x : τ_0)) s_1 τ_1 c C_1)
+  [(statement-type (g ...) s_0 τ_0 c C_0)
+   (statement-type (g ... (x : τ_0)) s_1 τ_1 c C_1)
    (where #t (subset C_0 c))
    (where #t (subset C_1 c))
    ----------------------------------------------------------------------- "Val"
-   (statement-type Γ (val x = s_0 #\; s_1) τ_1 c (set-append C_0 C_1))]
+   (statement-type (g ...) (val x = s_0 #\; s_1) τ_1 c (set-append C_0 C_1))]
 
   [(expr-type Γ e τ)
    ---------------------------------------------------- "Ret"
@@ -302,24 +302,23 @@
    (where #t (subset C c))
    (where (#t ...) ((subset C_j c) ... ))
     -------------------------------------------------------------------------------------------------- "App"
-   (statement-type Γ (b (e_i ... #\, b_j ...)) (substitute τ [C_j f] ...) c (set-append (flatten (C_j ...)) C))]
+   (statement-type Γ (b (e_i ... #\, b_j ...)) (substitute τ [f C_j] ...) c (set-append (flatten (C_j ...)) C))]
 
-  [(block-type Γ b σ c C_prime)
-   (statement-type (Γ (f : C_prime σ)) s τ c C)
+  [(block-type (g ...) b σ c C_prime)
+   (statement-type (g ... (f : C_prime σ)) s τ c C)
    (where #t (subset C_prime c))
    (where #t (subset C c))
    -------------------------------------------- "Def"
-   (statement-type Γ (def f = b #\; s) τ c C)]
+   (statement-type (g ...) (def f = b #\; s) τ c C)]
 
   ;; QUESTION: Is the inference for the continuation (k : τ) correct?
   ;; QUESTION: Uncertain about the (where #t (subset C c)) because it seems like it covers (where #t (subset C (append f c)))
-  ;; TODO: Change the Γ to be like (g ...) like block
-  [(statement-type (Γ (f :* (τ_i ... → τ_0))) s_1 τ (append f c) C)
-   (statement-type (Γ (x_i : τ_i) ... (k : C (τ_0 → τ))) s_2 τ c C)
+  [(statement-type (g ... (f :* (τ_i ... → τ_0))) s_1 τ (append f c) C)
+   (statement-type (g ... (x_i : τ_i) ... (k : C (τ_0 → τ))) s_2 τ c C)
    (where #t (subset C c))
    (where #t (subset C (append f c)))
    ------------------------------------------------------------------------------------ "Try"
-   (statement-type Γ (try f ⇒ s_1 with ((x_i : τ_i) ... #\, (k : τ_0)) ⇒ s_2) τ c (set-minus (f) C))]
+   (statement-type (g ...) (try f ⇒ s_1 with ((x_i : τ_i) ... #\, (k : τ_0)) ⇒ s_2) τ c (set-minus (f) C))]
   )
 
 ;; Reduction Rules
@@ -328,46 +327,41 @@
    System_C
    #:domain s
 
-   ;; TODO: Write up the reduction rules so that they are (in-hole E (the reduction rule))
-   (--> (in-hole E (val x = E_1 #\; s))
-        (in-hole E E_1))
-
-   (--> (in-hole E (l E_1 with (x ... #\, k) ⇒ s))
-        (in-hole E E_1))
-
-   (--> (unbox (box b))
+   (--> (in-hole E (unbox (box b)))
         b
         "box")
 
-   ;; NOTE: x ⇒ v is x being replaced with v
-   ;; TODO: Replace e and b with v and w where appropriate
-   (--> (val x = return e #\; s)
-        (substitute s [e x])
+   (--> (in-hole E (val x = return v #\; s))
+        (substitute s [x v])
         "val")
 
-   (--> (def f = b #\; s)
-        (substitute s [b f])
+   (--> (in-hole E (def f = w #\; s))
+        (substitute s [f w])
         "def")
 
-   (--> (l (return e) with h)
-        e
+   (--> (in-hole E (l (return v) with h))
+        v
         "ret")
-
-   ;; TODO: Put in the w_j σ_j C_j by using judgment-holds and the typing rules
-   ;; TODO: Make the substitution (substitute s [e x] ... [C f] ... [b f] ...)
-   (--> (((x : τ) ... #\, (f : σ) ⇒ s) (e ... #\, b ...))
-        (substitute s [e x] ... [b f] ...)
+   
+   ;; QUESTION: This judgment-holds is not correct, but I can't seem to get it to work for lists of judgment-holds and if I try to do it using a where clause, it complains about the judgment form having output positions
+   ;; QUESTION: Is this the correct way in which to express the substitution?
+   (--> (in-hole E (((x : τ) ... #\, (f : σ) ... ⇒ s) (v ... #\, w ...)))
+        (substitute s [x v] ... [f C] ... [f w] ...)
+        (judgment-holds (block-type () (w ...) (σ ...) none (C ...)))
         "app")
 
    ;; TODO: Add the Ξ as an input into the typing rules. We can add it into the environment Γ
-   (--> (try f ⇒ s with ((x : τ_i) ... #\, (k : τ)) ⇒ s_prime)
-        (l (substitute s [(l) f] [(cap l) f]) with ((x : τ_i) ... #\, (k : τ)) ⇒ s_prime)
+   ;; TODO: Add the l into the Γ. We can have a judgment-holds and then get the Γ from the judgment-holds.
+   ;; QUESTION: Am I actually supposed to add the l into the Ξ here in this reduction rule? Also, not sure if the way in which I have added the l is the correct way to do this (i.e., by using the judgment-holds to get the Γ).
+   (--> (in-hole E (try f ⇒ s with (((x : τ_i) ... #\, (k : τ)) ⇒ s_prime)))
+        (l (substitute s [(l) f] [(cap l) f]) with (((x : τ_i) ... #\, (k : τ)) ⇒ s_prime))
         (fresh l)
         "try")
 
-   ;; TODO: Use two in-holes to represent cap
-   ;(--> (in-hole E (l (E_1) with h))
-   ;     (in-hole E E_1)
-   ;     "cap")
-   
-   ))
+   ;; SANITY CHECK: Just want to make sure that I have done the nested in-hole correctly
+   ;; QUESTION: What is 'y' and I am not sure I have represented the hole in the substitution correctly
+   (--> (in-hole E (l (in-hole E_1 ((cap l) (v ... #\, ))) with (((x : τ_i) ... #\, (k : τ)) ⇒ s)))
+        (substitute s [x v] ... [k (y ⇒ l (in-hole E_1 (return y)) with (((x : τ_i) ... #\, (k : τ)) ⇒ s))])
+        "cap")
+   )
+  )

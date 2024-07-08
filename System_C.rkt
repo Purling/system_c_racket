@@ -2,9 +2,15 @@
 (require redex)
 
 ;; Symbols for use Γ, σ, τ, →, ⇒, Ξ
+;; N.B.: Handy for debugging (parameterize ([current-traced-metafunctions '(statement-type find find-helper find-equal)]) (judgment-holds ...))
 
 ;; TODO: Encode unit tests and things of the sort using test-judgment-holds, etc. (judgment-holds (statement-type () (return (box ( #\, ⇒ (return 0)))) τ none C) τ) and (apply-reduction-relation)
-;; TODO: Add the next step as a TODO (I think it might be to add vars)
+;; QUESTION: For my examples, should they all be just s terms or should I do all maner of type checkable things?
+;; TODO: Add variables to System C
+;; TODO: Add Wyvern abstraction to System C
+;; TODO: Create examples of System C with variables
+;; TODO: Create examples of System C with abstraction
+;; TODO: Create examples of System C with asbtraction and variables
 
 ;; Grammar
 (define-language System_C
@@ -107,19 +113,19 @@
   find-helper : xfl g -> find-return-type
   [(find-helper xfl (x : τ))
    τ
-   (side-condition (= (term xfl) (term x)))]
+   (side-condition (equal? (term xfl) (term x)))]
 
   [(find-helper xfl (f :* σ))
    (* σ)
-   (side-condition (= (term xfl) (term f)))]
+   (side-condition (equal? (term xfl) (term f)))]
 
   [(find-helper xfl (f : C σ))
    (C σ)
-   (side-condition (= (term xfl) (term f)))]
+   (side-condition (equal? (term xfl) (term f)))]
 
   [(find-helper xfl (l : τ_1 ... → τ_0))
    (τ_1 ... → τ_0)
-   (side-condition (= (term xfl) (term l)))]
+   (side-condition (equal? (term xfl) (term l)))]
 )
 
 ;; Metafunction which detects if the key x-or-f is the same as found within the term g
@@ -127,7 +133,7 @@
   find-equal : xfl g -> boolean
   [(find-equal xfl (x : τ))
    #t
-   (side-condition (= (term xfl) (term x)))
+   (side-condition (equal? (term xfl) (term x)))
 
    or
 
@@ -135,7 +141,7 @@
 
   [(find-equal xfl (f :* σ))
    #t
-   (side-condition (= (term xfl) (term f)))
+   (side-condition (equal? (term xfl) (term f)))
 
    or
 
@@ -143,7 +149,7 @@
 
   [(find-equal xfl (f : C σ))
    #t
-   (side-condition (= (term xfl) (term f)))
+   (side-condition (equal? (term xfl) (term f)))
 
    or
 
@@ -151,7 +157,7 @@
 
   [(find-equal xfl (l : τ_1 ... → τ_0))
    #t
-   (side-condition (= (term xfl) (term l)))
+   (side-condition (equal? (term xfl) (term l)))
 
    or
 
@@ -175,9 +181,9 @@
 
    or
 
-   (find xfl g_2)]
+   (find xfl (g_2))]
   
-  [(find xfl g_1)
+  [(find xfl (g_1))
    (find-helper xfl g_1)
    (where #t (find-equal xfl g_1))
 
@@ -366,6 +372,7 @@
 (define reduction
   (reduction-relation
    System_C
+   ;; QUESTION: What exactly is the domain and what effects does it have on the reduction rules?
    #:domain s
 
    (--> (in-hole E (unbox (box b)))
@@ -380,6 +387,7 @@
         (substitute s [f w])
         "def")
 
+   ;; QUESTION: I am not sure how reduction would work with just a regular return statment. Is it possible to just have a regular return statement? I assume it would just be return v |-> v?
    (--> (in-hole E (l (return v) with h))
         v
         "ret")

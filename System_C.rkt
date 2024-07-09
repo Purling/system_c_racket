@@ -28,6 +28,7 @@
      (box w))
 
   (w ((x : τ) ... #\, (f : σ) ... ⇒ s)
+     (unbox v) ;; QUESTION: This is not in the paper for some reason which would mean that the paper does not allow for box (unbox (box b))
      (cap l))
   
   (b f
@@ -70,9 +71,9 @@
   (k variable-not-otherwise-mentioned)
 
   ;; CHECK: https://docs.racket-lang.org/redex/Reduction_Relations.html indicates that the "Fresh variable clauses generate variables". Thus, I am pretty sure that fresh generates variables.
-  (l variable)
+  (l variable-not-otherwise-mentioned)
 
-  (h (((x : τ) ... #\, (k : τ)) ⇒ s))
+  (h ((x : τ) ... #\, (k : τ) ⇒ s))
 
   (xfl x
        f
@@ -84,6 +85,7 @@
                     #f
                     (τ ... → τ))
 
+  ;; TODO: Add a case for block application where the first b would the E
   (E hole
      (val x = E #\; s)
      (l E with (x ... #\, k) ⇒ s))
@@ -351,7 +353,7 @@
    (where #t (subset C c))
    (where #t (subset C (append f c)))
    --------------------------------------------------------------------------------------------------------- "Try"
-   (statement-type (g ...) (try f ⇒ s_1 with ((x_1 : τ_1) ... #\, (k : τ_0)) ⇒ s_2) τ c (set-minus (f) C))]
+   (statement-type (g ...) (try f ⇒ s_1 with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s_2)) τ c (set-minus (f) C))]
 
   [(where (τ_1 ... → τ_0) (find l Γ))
    (where #t (subset (l) c))
@@ -365,21 +367,21 @@
    (where #t (subset C c))
    (where #t (subset C (append l c)))
    ----------------------------------------------------- "Reset"
-   (statement-type (g ...) (l s_1 with (((x_1 : τ_1) ... #\, (k : τ_0)) ⇒ s_2)) τ c (set-minus (l) C))]
+   (statement-type (g ...) (l s_1 with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s_2)) τ c (set-minus (l) C))]
   )
 
 ;; Reduction Rules
 (define reduction
   (reduction-relation
    System_C
-   ;; QUESTION: What exactly is the domain and what effects does it have on the reduction rules?
+   ;; TODO: Add an in-hole E around the output of the reduction rules so that it keeps the surrounding context
    #:domain s
 
    (--> (in-hole E (unbox (box b)))
         b
         "box")
 
-   (--> (in-hole E (val x = return v #\; s))
+   (--> (in-hole E (val x = (return v) #\; s))
         (substitute s [x v])
         "val")
 
@@ -387,9 +389,8 @@
         (substitute s [f w])
         "def")
 
-   ;; QUESTION: I am not sure how reduction would work with just a regular return statment. Is it possible to just have a regular return statement? I assume it would just be return v |-> v?
    (--> (in-hole E (l (return v) with h))
-        v
+        (return v)
         "ret")
    
    ;; QUESTION: This judgment-holds is not correct, but I can't seem to get it to work for lists of judgment-holds and if I try to do it using a where clause, it complains about the judgment form having output positions
@@ -408,9 +409,10 @@
         "try")
 
    ;; CHECK: Just want to make sure that I have done the nested in-hole correctly
-   ;; QUESTION: What is 'y' and I am not sure I have represented the hole in the substitution correctly
+   ;; QUESTION: I am not sure I have represented the hole in the substitution correctly
    (--> (in-hole E (l (in-hole E_1 ((cap l) (v_1 ... #\, ))) with (((x_1 : τ_1) ... #\, (k : τ_0)) ⇒ s)))
-        (substitute s [x_1 v_1] ... [k (y ⇒ l (in-hole E_1 (return y)) with (((x_1 : τ_1) ... #\, (k : τ_0)) ⇒ s))])
+        (substitute s [x_1 v_1] ... [k ((x : τ_0) #\, ⇒ (l (in-hole E_1 (return x)) with (((x_1 : τ_1) ... #\, (k : τ_0)) ⇒ s)))])
+        (fresh x)
         "cap")
    )
   )

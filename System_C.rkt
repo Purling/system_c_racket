@@ -2,10 +2,9 @@
 (require redex)
 
 ;; Symbols for use Γ, σ, τ, →, ⇒, Ξ
-;; N.B.: Handy for debugging (parameterize ([current-traced-metafunctions '(statement-type find find-helper find-equal)]) (judgment-holds ...))
+;; N.B.: Handy for debugging (parameterize ([current-traced-metafunctions '(statement-type find find-helper find-equal block-type expr-type subset)]) (judgment-holds ...))
 
-;; TODO: Encode unit tests and things of the sort using test-judgment-holds, etc. (judgment-holds (statement-type () (return (box ( #\, ⇒ (return 0)))) τ none C) τ) and (apply-reduction-relation)
-;; QUESTION: For my examples, should they all be just s terms or should I do all maner of type checkable things?
+;; TODO: Encode unit tests and things of the sort using test-judgment-holds
 ;; TODO: Add variables to System C
 ;; TODO: Add Wyvern abstraction to System C
 ;; TODO: Create examples of System C with variables
@@ -28,14 +27,15 @@
      (box w))
 
   (w ((x : τ) ... #\, (f : σ) ... ⇒ s)
-     (unbox v) ;; QUESTION: This is not in the paper for some reason which would mean that the paper does not allow for box (unbox (box b))
      (cap l))
   
   (b f
      ((x : τ) ... #\, (f : σ) ... ⇒ s)
      (unbox e)
      (cap l))
-  
+
+  ;; Implement capture avoiding substitution for these s terms
+  ;; Every time a new binding occurs, make it fresh
   (s (def f = b #\; s)
      (b (e ... #\, b ...))
      (val x = s #\; s)
@@ -56,6 +56,7 @@
   (g (x : τ)
      (f :* σ)
      (f : C σ)
+     (k : C σ)
      (l : τ ... → τ))
 
   (c none
@@ -66,11 +67,11 @@
   (f variable-not-otherwise-mentioned)
 
   (f-or-l f
-          l)
+          l
+          none)
 
   (k variable-not-otherwise-mentioned)
 
-  ;; CHECK: https://docs.racket-lang.org/redex/Reduction_Relations.html indicates that the "Fresh variable clauses generate variables". Thus, I am pretty sure that fresh generates variables.
   (l variable-not-otherwise-mentioned)
 
   (h ((x : τ) ... #\, (k : τ) ⇒ s))
@@ -85,19 +86,18 @@
                     #f
                     (τ ... → τ))
 
-  ;; TODO: Add a case for block application where the first b would the E
   (E hole
+     (Γ E)
+     (E (e ... #\, b ...))
      (val x = E #\; s)
      (l E with (x ... #\, k) ⇒ s))
 
-  ;; CHECK: Need to check that these binding-forms are done correctly. I am not sure that we need shadow because shadow seems to be for multiple variables in a single scope (https://docs.racket-lang.org/redex/Languages.html#(part._.Multiple_.Variables_in_a_.Single_.Scope))
   #:binding-forms
-  (def f = b #\; s #:refers-to b)
-  (val x = s_0 #\; s #:refers-to s_0) ;; QUESTION: Not sure if I need to differentiate the two s terms
-  (try f ⇒ s with h #:refers-to s)
-  ;; QUESTION: The below does not seemed to be allowed because it is throwing an error that there can only be one ellipses per binding form. It only seems to work if we put square brackets (https://docs.racket-lang.org/guide/syntax-notation.html) around one of the lists.
-  ;; CONT'D: I don't know if this means that we will have to apply the square brackets to the other parts of the grammar where this term appears or if there is a better way to approach this.
-  ([(x : τ) ...] #\, [(f : σ) ...] ⇒ s #:refers-to s)
+  (def f = b #\; s #:refers-to f)
+  (val x = s #\; s #:refers-to x)
+  (try f ⇒ s with h #:refers-to f) #;
+  ;; Doesn't seem to work because of the grammar but it's fine
+  ((x : τ) ... #\, (f : σ) ... ⇒ s #:refers-to (shadow (shadow x ...) (shadow f ...)))
   )
 
 ;; Metafunction to find whether a l is in a Ξ
@@ -169,40 +169,30 @@
 ;; Metafunction which attempts to find an element within a list and either returns #f or the element found
 (define-metafunction System_C
   find : xfl Γ -> find-return-type
-  [(find xfl (g_1 g_2 ... g_3))
+  [(find xfl (g_1 g_2 ...))
    (find-helper xfl g_1)
    (where #t (find-equal xfl g_1))
 
    or
 
-   (find xfl (g_2 ... g_3))]
+   (find xfl (g_2 ...))]
   
-  [(find xfl (g_1 g_2))
-   (find-helper xfl g_1)
-   (where #t (find-equal xfl g_1))
-
-   or
-
-   (find xfl (g_2))]
-  
-  [(find xfl (g_1))
-   (find-helper xfl g_1)
-   (where #t (find-equal xfl g_1))
-
-   or
-
+  [(find xfl ())
    #f]
   )
 
 ;; Set append metafunction for one element
 ;; CHECK: Even though C is not (f-or-l ...) because it is only (f ...) in this metafunction, I don't think that it will require any changes for the set functions. We are not detecting for l outside of the reduction rules.
 (define-metafunction System_C
-  append : f C -> C
+  append : f c -> C
   [(append f (f_1 ... f f_2 ...))
    (f_1 ... f f_2 ...)]
 
   [(append f (f_1 ...))
    (f_1 ... f)]
+
+  [(append f none)
+   (f none)]
   )
 
 (define-metafunction System_C
@@ -283,11 +273,8 @@
    ------------------------- "Tracked"
    (block-type Γ f σ c (f))]
 
-  ;; QUESTION: Uncertain about the (where #t (subset C c)) because it seems like it covers (where #t (subset C (set-append c (f ...))))
-  ;; QUESTION: Not sure if g_j is just a f_j or something else entirely? Reading the paper, it seems that g_j is a block which is what f_j would be.
   [(statement-type (g ... (x : τ_1) ... (f_1 :* σ) ...) s τ (set-append c (f_1 ...)) C)
    (where #t (subset C (set-append c (f_1 ...))))
-   (where #t (subset C c))
    --------------------------------------------------------------------------------------------------------------- "Block"
    (block-type (g ...) ((x : τ_1) ... #\, (f_1 : σ) ... ⇒ s) (τ_1 ... #\, (f_1 : σ) ... → τ) c (set-minus (f_1 ...) C))]
 
@@ -330,7 +317,6 @@
    ------------------------------------- "Ret"
    (statement-type Γ (return e) τ c ())]
 
-  ;; QUESTION: Uncertain about the subset rule which is encoded by (where (#t ...) ((subset C_j c) ... )). Also not sure if the substitution (substitute τ [C_j f] ...) works as intended.
   [(block-type Γ b (τ_1 ... #\, (f : σ_1) ... → τ) c C)
    (expr-type Γ e_1 τ_1) ...
    (block-type Γ b_1 σ_1 c C_1) ...
@@ -346,11 +332,9 @@
    ------------------------------------------------- "Def"
    (statement-type (g ...) (def f = b #\; s) τ c C)]
 
-  ;; QUESTION: Is the inference for the continuation (k : τ) correct?
-  ;; QUESTION: Uncertain about the (where #t (subset C c)) because it seems like it covers (where #t (subset C (append f c)))
-  [(statement-type (g ... (f :* (τ_1 ... → τ_0))) s_1 τ (append f c) C)
-   (statement-type (g ... (x_1 : τ_1) ... (k : C (τ_0 → τ))) s_2 τ c C)
-   (where #t (subset C c))
+  ;; TODO: Change the behaviour of append such that when something is appended to none, it returns none
+  [(statement-type (g ... (f :* (τ_1 ... #\, → τ_0))) s_1 τ (append f c) C)
+   (statement-type (g ... (x_1 : τ_1) ... (k : C (τ_0 #\, → τ))) s_2 τ c C)
    (where #t (subset C (append f c)))
    --------------------------------------------------------------------------------------------------------- "Try"
    (statement-type (g ...) (try f ⇒ s_1 with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s_2)) τ c (set-minus (f) C))]
@@ -360,11 +344,9 @@
    ----------------------------------------------------- "Cap"
    (statement-type Γ (cap l) (τ_1 ... #\, → τ_0) c (l))]
 
-  ;; QUESTION: Same questions as with try because they are very similar rules
   [(where (τ_1 ... → τ_0) (find l (g ...)))
    (statement-type (g ...) s_1 τ (append l c) C)
    (statement-type (g ... (x_1 : τ_1) ... (k : C (τ_0 → τ))) s_2 τ c C)
-   (where #t (subset C c))
    (where #t (subset C (append l c)))
    ----------------------------------------------------- "Reset"
    (statement-type (g ...) (l s_1 with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s_2)) τ c (set-minus (l) C))]
@@ -374,44 +356,39 @@
 (define reduction
   (reduction-relation
    System_C
-   ;; TODO: Add an in-hole E around the output of the reduction rules so that it keeps the surrounding context
-   #:domain s
+   #:domain (Γ s) 
 
    (--> (in-hole E (unbox (box b)))
-        b
+        (in-hole E b)
         "box")
 
    (--> (in-hole E (val x = (return v) #\; s))
-        (substitute s [x v])
+        (in-hole E (substitute s [x v]))
         "val")
 
    (--> (in-hole E (def f = w #\; s))
-        (substitute s [f w])
+        (in-hole E (substitute s [f w]))
         "def")
 
    (--> (in-hole E (l (return v) with h))
-        (return v)
+        (in-hole E (return v))
         "ret")
    
-   ;; QUESTION: This judgment-holds is not correct, but I can't seem to get it to work for lists of judgment-holds and if I try to do it using a where clause, it complains about the judgment form having output positions
-   ;; QUESTION: Is this the correct way in which to express the substitution? Especially the f_j substitution.
+   ;; TODO: Create a judgment-holds which assembles a block-type judgment-holds for each element in this list
+   ;; TODO: Define own substitute metafunction which can differentiate between C_j and W_j when replacing depending on f_j is
+   ;; N.B.: Metafunction that takes an s and a list of variables and type pairs and a list of variables and C pairs
    (--> (in-hole E (((x_1 : τ_1) ... #\, (f_1 : σ_1) ... ⇒ s) (v_1 ... #\, w_1 ...)))
-        (substitute s [x_1 v_1] ... [f_1 C] ... [f_1 w_1] ...)
+        (in-hole E (substitute s [x_1 v_1] ... [f_1 C] ... [f_1 w_1] ...))
         (judgment-holds (block-type () (w_1 ...) (σ_1 ...) none (C ...)))
         "app")
 
-   ;; QUESTION: Just need another set of eyes over this reduction rule and whether I have done this correctly.
-   ;; QUESTION: Am I actually supposed to add the l into the Ξ here in this reduction rule? Also, not sure if the way in which I have added the l is the correct way to do this (i.e., by using the judgment-holds to get the Γ).
-   (--> (in-hole E (try f ⇒ s with (((x_1 : τ_1) ... #\, (k : τ_0)) ⇒ s_prime)))
-        (l (substitute s [(l) f] [(cap l) f]) with (((x_1 : τ_1) ... #\, (k : τ_0)) ⇒ s_prime))
+   (--> ((g ...) (in-hole E (try f ⇒ s with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s_prime))))
+        ((g ... (l : τ_1 ... → τ_0)) (in-hole E (l (substitute s [(l) f] [(cap l) f]) with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s_prime))))
         (fresh l)
-        (judgment-holds (statement-type (list-append (l : τ_1 ... → τ_0) Γ) (try f ⇒ s with (((x_1 : τ_1) ... #\, (k : τ_0)) ⇒ s_prime)) τ none C))
         "try")
 
-   ;; CHECK: Just want to make sure that I have done the nested in-hole correctly
-   ;; QUESTION: I am not sure I have represented the hole in the substitution correctly
-   (--> (in-hole E (l (in-hole E_1 ((cap l) (v_1 ... #\, ))) with (((x_1 : τ_1) ... #\, (k : τ_0)) ⇒ s)))
-        (substitute s [x_1 v_1] ... [k ((x : τ_0) #\, ⇒ (l (in-hole E_1 (return x)) with (((x_1 : τ_1) ... #\, (k : τ_0)) ⇒ s)))])
+   (--> (in-hole E (l (in-hole E_1 ((cap l) (v_1 ... #\, ))) with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s)))
+        (in-hole E (substitute s [x_1 v_1] ... [k ((x : τ_0) #\, ⇒ (l (in-hole E_1 (return x)) with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s)))]))
         (fresh x)
         "cap")
    )

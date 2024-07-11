@@ -34,8 +34,7 @@
      (unbox e)
      (cap l))
 
-  ;; Implement capture avoiding substitution for these s terms
-  ;; Every time a new binding occurs, make it fresh
+  ;; TODO: Implement capture avoiding substitution for these s terms. Every time a new binding occurs, make it fresh
   (s (def f = b #\; s)
      (b (e ... #\, b ...))
      (val x = s #\; s)
@@ -67,8 +66,7 @@
   (f variable-not-otherwise-mentioned)
 
   (f-or-l f
-          l
-          none)
+          l)
 
   (k variable-not-otherwise-mentioned)
 
@@ -92,11 +90,12 @@
      (val x = E #\; s)
      (l E with (x ... #\, k) ⇒ s))
 
+  ;; TODO; Delete these after your own substitute metafunction is finished
   #:binding-forms
   (def f = b #\; s #:refers-to f)
   (val x = s #\; s #:refers-to x)
   (try f ⇒ s with h #:refers-to f) #;
-  ;; Doesn't seem to work because of the grammar but it's fine
+  ;; N.B.: Doesn't seem to work because of the grammar but it's fine
   ((x : τ) ... #\, (f : σ) ... ⇒ s #:refers-to (shadow (shadow x ...) (shadow f ...)))
   )
 
@@ -182,9 +181,8 @@
   )
 
 ;; Set append metafunction for one element
-;; CHECK: Even though C is not (f-or-l ...) because it is only (f ...) in this metafunction, I don't think that it will require any changes for the set functions. We are not detecting for l outside of the reduction rules.
 (define-metafunction System_C
-  append : f c -> C
+  append : f c -> c
   [(append f (f_1 ... f f_2 ...))
    (f_1 ... f f_2 ...)]
 
@@ -192,7 +190,7 @@
    (f_1 ... f)]
 
   [(append f none)
-   (f none)]
+   none]
   )
 
 (define-metafunction System_C
@@ -332,7 +330,6 @@
    ------------------------------------------------- "Def"
    (statement-type (g ...) (def f = b #\; s) τ c C)]
 
-  ;; TODO: Change the behaviour of append such that when something is appended to none, it returns none
   [(statement-type (g ... (f :* (τ_1 ... #\, → τ_0))) s_1 τ (append f c) C)
    (statement-type (g ... (x_1 : τ_1) ... (k : C (τ_0 #\, → τ))) s_2 τ c C)
    (where #t (subset C (append f c)))
@@ -350,6 +347,16 @@
    (where #t (subset C (append l c)))
    ----------------------------------------------------- "Reset"
    (statement-type (g ...) (l s_1 with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s_2)) τ c (set-minus (l) C))]
+  )
+
+(define-judgment-form System_C
+  #:mode (multi-block I O O)
+  #:contract (multi-block (w ...) (σ ...) (C ...))
+
+  [(block-type () w σ none C) ...
+   ------------------------------------- "Multi"
+   (multi-block (w ...) (σ ...) (C ...))
+   ]
   )
 
 ;; Reduction Rules
@@ -373,13 +380,13 @@
    (--> (in-hole E (l (return v) with h))
         (in-hole E (return v))
         "ret")
-   
-   ;; TODO: Create a judgment-holds which assembles a block-type judgment-holds for each element in this list
+
+   ;; QUESTION: Do I have to replace the racket substitute function with my own function everywhere?
    ;; TODO: Define own substitute metafunction which can differentiate between C_j and W_j when replacing depending on f_j is
    ;; N.B.: Metafunction that takes an s and a list of variables and type pairs and a list of variables and C pairs
    (--> (in-hole E (((x_1 : τ_1) ... #\, (f_1 : σ_1) ... ⇒ s) (v_1 ... #\, w_1 ...)))
         (in-hole E (substitute s [x_1 v_1] ... [f_1 C] ... [f_1 w_1] ...))
-        (judgment-holds (block-type () (w_1 ...) (σ_1 ...) none (C ...)))
+        (judgment-holds (multi-block (w_1 ...) (σ_1 ...) (C ...)))
         "app")
 
    (--> ((g ...) (in-hole E (try f ⇒ s with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s_prime))))

@@ -254,6 +254,9 @@
 
   [(flatten (C))
    C]
+
+  [(flatten ())
+   ()]
   )
 
 ;; Typing rules for block typing

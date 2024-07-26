@@ -11,6 +11,11 @@
 | `val value = (return 1) #\; (return value)` | `(judgment-holds (statement-type () (val value = (return 1) #\; (return value)) τ none C))` | `(apply-reduction-relation reduction (term (() (val value = (return 1) #\; (return value)))))` | `#t` <br> τ = `Int` |
 | `try f ⇒ (return (box ( #\, ⇒ (val g = (return (box f)) #\; (return 42))))) with ( #\, (k : Int) ⇒ (return (box ( #\, ⇒ (return 0)))))` | `(judgment-holds (statement-type () (try f ⇒ (return (box ( #\, ⇒ (val g = (return (box f)) #\; (return 42))))) with ( #\, (k : Int) ⇒ (return (box ( #\, ⇒ (return 0)))))) τ none C))` | `(apply-reduction-relation reduction (term (() (try f ⇒ (return (box ( #\, ⇒ (val g = (return (box f)) #\; (return 42))))) with ( #\, (k : Int) ⇒ (return (box ( #\, ⇒ (return 0)))))))))` | `#t` <br> τ = `(#\, → Int) at ()` |
 | `def f = ( #\, ⇒ (return 0)) #\; (f ( #\, ))` | `(judgment-holds (statement-type () (def f = ( #\, ⇒ (return 0)) #\; (f ( #\, ))) τ none C))` | `(apply-reduction-relation reduction (term (() (def f = ( #\, ⇒ (return 0)) #\; (f ( #\, ))))))` | `#t` <br> τ = `Int` <br> Step = `(() ((#\, ⇒ (return 0)) (#\,)))` |
+| `val x = (return new 0); return !x` | N/A | N/A | N/A |
+| `val x = (return new 0); val y = x := 1; return !x` | N/A | N/A | N/A |
+| `val x = (return new 0); return x := 1` | N/A | N/A | N/A |
+| `<val x = return l; return !x \| Ξ(l) = 0>` | N/A | N/A | N/A | N/A |
+| `val x = (return (new box ((,) => return 1))); return !x` | N/A | N/A | N/A |
 
 # Negative Unit Tests
 
@@ -20,6 +25,9 @@
 | `return unknown` | `(judgment-holds (statement-type () (return unknown) τ none C))` | `(apply-reduction-relation reduction (term (return unknown)))` | `x` is not defined. |
 | `return (return 0)` | `(judgment-holds (statement-type () (return (return 0)) τ none C))` | `(apply-reduction-relation reduction (term (return (return 0))))` | The syntax for return is incorrect. |
 | `try f ⇒ (return (box ( #\, ⇒ (val g = (return (box f)) #\; (return 42))))) with ( #\, (k : Int) ⇒ (return 0))` | `(judgment-holds (statement-type () (try f ⇒ (return (box ( #\, ⇒ (val g = (return (box f)) #\; (return 42))))) with ( #\, (k : Int) ⇒ (return 0))) τ none C))` | `(apply-reduction-relation reduction (term (try f ⇒ (return (box ( #\, ⇒ (val g = (return (box f)) #\; (return 42))))) with ( #\, (k : Int) ⇒ (return 0)))))` | Continuation is not well-typed. |
+| `return (new 0)` | N/A | N/A | You cannot return a location. |
+| `return !0` | N/A | N/A | The variable has yet to be assigned. |
+| `val x = (return new 0); val y = x := true` | N/A | N/A | Different types while assigning variable |
 
 * Try type checking block which does not have all of its capabilities
 
@@ -36,3 +44,5 @@
 * try f => return f with ... === try { (f : 𝜎) ⇒ return box {f} f } with { ... }
 
 * Try with return continuation
+
+* Example with try and arguments for the block

@@ -1,15 +1,8 @@
  #lang racket
 (require redex)
 
-;; Symbols for use Γ, σ, τ, →, ⇒, Ξ
+;; Symbols for use Γ, σ, τ, →, ⇒, Ξ, Σ
 ;; N.B.: Handy for debugging (parameterize ([current-traced-metafunctions '(statement-type find find-helper find-equal block-type expr-type subset)]) (judgment-holds ...))
-
-;; TODO: Encode unit tests and things of the sort using test-judgment-holds
-;; TODO: Add variables to System C
-;; TODO: Add Wyvern abstraction to System C
-;; TODO: Create examples of System C with variables
-;; TODO: Create examples of System C with abstraction
-;; TODO: Create examples of System C with asbtraction and variables
 
 ;; Grammar
 (define-language System_C
@@ -18,7 +11,11 @@
      natural
      true
      false
-     (box b))
+     (box b)
+     (new e)
+     (! e)
+     (e := e)
+     (l))
 
   (v natural
      ()
@@ -34,23 +31,29 @@
      (unbox e)
      (cap l))
 
-  ;; TODO: Implement capture avoiding substitution for these s terms. Every time a new binding occurs, make it fresh
   (s (def f = b #\; s)
      (b (e ... #\, b ...))
      (val x = s #\; s)
      (return e)
      (try f ⇒ s with h)
+     (intercept f ⇒ s with h)
      (l s with h))
 
   (τ Int
      Boolean
-     (σ at C))
+     (σ at C)
+     (Ref τ))
   
   (σ (τ ... #\, (f : σ) ... → τ))
 
   (C (f-or-l ...))
 
   (Γ (g ...))
+
+  (Σ ((l : τ) ...))
+
+  (Ξ ((l : τ) ...)
+     ((l : v) ...))
 
   (g (x : τ)
      (f :* σ)
@@ -90,12 +93,10 @@
      (val x = E #\; s)
      (l E with (x ... #\, k) ⇒ s))
 
-  ;; TODO; Delete these after your own substitute metafunction is finished
   #:binding-forms
   (def f = b #\; s #:refers-to f)
   (val x = s #\; s #:refers-to x)
   (try f ⇒ s with h #:refers-to f) #;
-  ;; N.B.: Doesn't seem to work because of the grammar but it's fine
   ((x : τ) ... #\, (f : σ) ... ⇒ s #:refers-to (shadow (shadow x ...) (shadow f ...)))
   )
 
@@ -261,102 +262,132 @@
 
 ;; Typing rules for block typing
 (define-judgment-form System_C
-  #:contract (block-type Γ b σ c C)
-  #:mode (block-type I I O I O)
+  #:contract (block-type Γ Σ b σ c C)
+  #:mode (block-type I I I O I O)
 
   [(where (C σ) (find f Γ))
    (where #t (subset C c))
    ------------------------ "Transparent"
-   (block-type Γ f σ c C)]
+   (block-type Γ Σ f σ c C)]
 
   [(where (* σ) (find f Γ))
    (where #t (subset (f) c))
    ------------------------- "Tracked"
-   (block-type Γ f σ c (f))]
+   (block-type Γ Σ f σ c (f))]
 
-  [(statement-type (g ... (x : τ_1) ... (f_1 :* σ) ...) s τ (set-append c (f_1 ...)) C)
+  [(statement-type (g ... (x : τ_1) ... (f_1 :* σ) ...) Σ s τ (set-append c (f_1 ...)) C)
    (where #t (subset C (set-append c (f_1 ...))))
    --------------------------------------------------------------------------------------------------------------- "Block"
-   (block-type (g ...) ((x : τ_1) ... #\, (f_1 : σ) ... ⇒ s) (τ_1 ... #\, (f_1 : σ) ... → τ) c (set-minus (f_1 ...) C))]
+   (block-type (g ...) Σ ((x : τ_1) ... #\, (f_1 : σ) ... ⇒ s) (τ_1 ... #\, (f_1 : σ) ... → τ) c (set-minus (f_1 ...) C))]
 
-  [(expr-type Γ e (σ at C))
+  [(expr-type Γ Σ e (σ at C))
    (where #t (subset C c))
    ------------------------------- "BoxElim"
-   (block-type Γ (unbox e) σ c C)]
+   (block-type Γ Σ (unbox e) σ c C)]
   )
 
 ;; Typing rule for expression typing
 (define-judgment-form System_C
-  #:mode (expr-type I I O)
-  #:contract (expr-type Γ e τ)
+  #:mode (expr-type I I I O)
+  #:contract (expr-type Γ Σ e τ)
 
   [
    --------------------------- "Lit"
-   (expr-type Γ natural Int)]
+   (expr-type Γ Σ natural Int)]
 
   [(where τ (find x Γ))
    -------------------- "Var"
-   (expr-type Γ x τ)]
+   (expr-type Γ Σ x τ)]
 
-  [(block-type Γ b σ none C)
+  [(block-type Γ Σ b σ none C)
    ------------------------------- "BoxIntro"
-   (expr-type Γ (box b) (σ at C))]
+   (expr-type Γ Σ (box b) (σ at C))]
+
+  [(expr-type Γ Σ e (Ref τ))
+   ------------------------------- "Deref"
+   (expr-type Γ Σ (! e) τ)]
+
+  [(expr-type Γ Σ e τ)
+   ------------------------------- "New"
+   (expr-type Γ Σ (new e) (Ref τ))]
+
+  [(expr-type Γ Σ e_1 (Ref τ))
+   (expr-type Γ Σ e_2 τ)
+   ------------------------------- "Assign"
+   (expr-type Γ Σ (e_1 := e_2) τ)]
+
+  [(where τ (find l Σ))
+   ------------------------------- "Ref"
+   (expr-type Γ Σ l (Ref τ))]
   )
 
 (define-judgment-form System_C
-  #:mode (statement-type I I O I O)
-  #:contract (statement-type Γ s τ c C)
+  #:mode (statement-type I I I O I O)
+  #:contract (statement-type Γ Σ s τ c C)
 
-  [(statement-type (g ...) s_0 τ_0 c C_0)
-   (statement-type (g ... (x : τ_0)) s_1 τ_1 c C_1)
+  [(statement-type (g ...) Σ s_0 τ_0 c C_0)
+   (statement-type (g ... (x : τ_0)) Σ s_1 τ_1 c C_1)
    (where #t (subset C_0 c))
    (where #t (subset C_1 c))
    -------------------------------------------------------------------------- "Val"
-   (statement-type (g ...) (val x = s_0 #\; s_1) τ_1 c (set-append C_0 C_1))]
+   (statement-type (g ...) Σ (val x = s_0 #\; s_1) τ_1 c (set-append C_0 C_1))]
 
-  [(expr-type Γ e τ)
+  [(expr-type Γ Σ e τ)
    ------------------------------------- "Ret"
-   (statement-type Γ (return e) τ c ())]
+   (statement-type Γ Σ (return e) τ c ())]
 
-  [(block-type Γ b (τ_1 ... #\, (f : σ_1) ... → τ) c C)
-   (expr-type Γ e_1 τ_1) ...
-   (block-type Γ b_1 σ_1 c C_1) ...
+  [(block-type Γ Σ b (τ_1 ... #\, (f : σ_1) ... → τ) c C)
+   (expr-type Γ Σ e_1 τ_1) ...
+   (block-type Γ Σ b_1 σ_1 c C_1) ...
    (where #t (subset C c))
    (where (#t ...) ((subset C_1 c) ... ))
     ------------------------------------------------------------------------------------------------------------ "App"
-   (statement-type Γ (b (e_1 ... #\, b_1 ...)) (substitute τ [f C_1] ...) c (set-append (flatten (C_1 ...)) C))]
+   (statement-type Γ Σ (b (e_1 ... #\, b_1 ...)) (substitute τ [f C_1] ...) c (set-append (flatten (C_1 ...)) C))]
 
-  [(block-type (g ...) b σ c C_prime)
-   (statement-type (g ... (f : C_prime σ)) s τ c C)
+  [(block-type (g ...) Σ b σ c C_prime)
+   (statement-type (g ... (f : C_prime σ)) Σ s τ c C)
    (where #t (subset C_prime c))
    (where #t (subset C c))
    ------------------------------------------------- "Def"
-   (statement-type (g ...) (def f = b #\; s) τ c C)]
+   (statement-type (g ...) Σ (def f = b #\; s) τ c C)]
 
-  [(statement-type (g ... (f :* (τ_1 ... #\, → τ_0))) s_1 τ (append f c) C)
-   (statement-type (g ... (x_1 : τ_1) ... (k : C (τ_0 #\, → τ))) s_2 τ c C)
+  [(statement-type (g ... (f :* (τ_1 ... #\, → τ_0))) Σ s_1 τ (append f c) C)
+   (statement-type (g ... (x_1 : τ_1) ... (k : C (τ_0 #\, → τ))) Σ s_2 τ c C)
    (where #t (subset C (append f c)))
    --------------------------------------------------------------------------------------------------------- "Try"
-   (statement-type (g ...) (try f ⇒ s_1 with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s_2)) τ c (set-minus (f) C))]
+   (statement-type (g ...) Σ (try f ⇒ s_1 with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s_2)) τ c (set-minus (f) C))]
 
   [(where (τ_1 ... → τ_0) (find l Γ))
    (where #t (subset (l) c))
    ----------------------------------------------------- "Cap"
-   (statement-type Γ (cap l) (τ_1 ... #\, → τ_0) c (l))]
+   (statement-type Γ Σ (cap l) (τ_1 ... #\, → τ_0) c (l))]
 
   [(where (τ_1 ... → τ_0) (find l (g ...)))
-   (statement-type (g ...) s_1 τ (append l c) C)
-   (statement-type (g ... (x_1 : τ_1) ... (k : C (τ_0 → τ))) s_2 τ c C)
+   (statement-type (g ...) Σ s_1 τ (append l c) C)
+   (statement-type (g ... (x_1 : τ_1) ... (k : C (τ_0 → τ))) Σ s_2 τ c C)
    (where #t (subset C (append l c)))
    ----------------------------------------------------- "Reset"
-   (statement-type (g ...) (l s_1 with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s_2)) τ c (set-minus (l) C))]
+   (statement-type (g ...) Σ (l s_1 with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s_2)) τ c (set-minus (l) C))]
+
+  [(statement-type (g ... (f :* (τ_1 ... #\, → τ_0))) Σ s_1 τ (append f c) C)
+   (statement-type (g ... (x_1 : τ_1) ... (k : C (τ_0 #\, → τ))) Σ s_2 τ c C)
+   (where #t (subset C (append f c)))
+   (where (τ_1 ... #\, → τ_0) (find-equal f (g ...)))
+   --------------------------------------------------------------------------------------------------------- "Intercept"
+   (statement-type (g ...) Σ (try f ⇒ s_1 with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s_2)) τ c (set-minus (f) C))]
+
+  [(statement-type (g ...) Σ s_1 τ c C)
+   (statement-type (g ... (x_1 : τ_1) ... (k : C (τ_0 #\, → τ))) Σ s_2 τ c C)
+   (where (τ_1 ... #\, → τ_0) (find-equal l Σ))
+   --------------------------------------------------------------------------------------------------------- "CapIntercept"
+   (statement-type (g ...) Σ (try (cap l) ⇒ s_1 with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s_2)) τ c C)]
   )
 
 (define-judgment-form System_C
   #:mode (multi-block I O O)
   #:contract (multi-block (w ...) (σ ...) (C ...))
 
-  [(block-type () w σ none C) ...
+  [(block-type () () w σ none C) ...
    ------------------------------------- "Multi"
    (multi-block (w ...) (σ ...) (C ...))
    ]
@@ -384,9 +415,6 @@
         (in-hole E (return v))
         "ret")
 
-   ;; QUESTION: Do I have to replace the racket substitute function with my own function everywhere?
-   ;; TODO: Define own substitute metafunction which can differentiate between C_j and W_j when replacing depending on f_j is
-   ;; N.B.: Metafunction that takes an s and a list of variables and type pairs and a list of variables and C pairs
    (--> (in-hole E (((x_1 : τ_1) ... #\, (f_1 : σ_1) ... ⇒ s) (v_1 ... #\, w_1 ...)))
         (in-hole E (substitute s [x_1 v_1] ... [f_1 C] ... [f_1 w_1] ...))
         (judgment-holds (multi-block (w_1 ...) (σ_1 ...) (C ...)))
@@ -401,5 +429,23 @@
         (in-hole E (substitute s [x_1 v_1] ... [k ((x : τ_0) #\, ⇒ (l (in-hole E_1 (return x)) with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s)))]))
         (fresh x)
         "cap")
+
+   (--> (in-hole E (! l))
+        (in-hole E v)
+        "deref")
+
+   (--> (in-hole E (l := v))
+        (in-hole E v)
+        "assign")
+
+   (--> (in-hole E (new v))
+        (in-hole E l)
+        (fresh l)
+        "new")
+
+   (--> (in-hole E (intercept (cap l) ⇒ s with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s_prime)))
+        (in-hole E (l with ((x_1 : τ_1) ... #\, (k : τ_0) ⇒ s_prime)))
+        (fresh l)
+        "interc")
    )
   )
